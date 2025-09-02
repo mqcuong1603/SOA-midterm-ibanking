@@ -46,11 +46,13 @@ Login with username and password to authenticate user. Returns JWT token for API
 
 ## Student Management
 
-**🔒 All student endpoints require JWT authentication**
+### 🔒 Authentication Required
+
+All student endpoints require JWT authentication.
 
 **Authorization Header Required:**
 
-```
+```header
 Authorization: Bearer <your_jwt_token>
 ```
 
@@ -64,7 +66,7 @@ Get student information by student ID. Shows tuition amount if unpaid.
 
 **Headers:**
 
-```
+```header
 Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 ```
 
