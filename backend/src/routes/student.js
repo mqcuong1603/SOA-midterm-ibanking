@@ -1,7 +1,10 @@
 import express from "express";
 import Student from "../models/Student.js";
+import authMiddleware from "../middleware/auth.js";
 
 const router = express.Router();
+
+router.use(authMiddleware);
 
 router.get("/:student_id", async (req, res) => {
   try {
