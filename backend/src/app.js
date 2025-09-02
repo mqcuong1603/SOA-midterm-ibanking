@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import sequelize from "./config/database.js";
 import authRoutes from "./routes/auth.js";
+import studentRoute from "./routes/student.js";
 import User from "./models/User.js";
 import Student from "./models/Student.js";
 import devRoutes from "./routes/dev.js";
@@ -31,6 +32,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/student", studentRoute);
 app.use("/api/dev", devRoutes);
 
 // database initialization
