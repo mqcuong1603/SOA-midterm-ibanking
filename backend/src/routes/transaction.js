@@ -11,24 +11,27 @@ router.use(authMiddleware);
 
 router.post("/initialize", async (req, res) => {
   try {
-    //get info
     const { student_id } = req.body;
     const payer_id = req.user.userId;
+
+    // Validate input
+    if (!student_id) {
+      return res.status(400).json({ error: "Student ID is required" });
+    }
 
     const student = await Student.findOne({
       where: { student_id: student_id },
     });
 
-    //check
     if (!student) {
-      return res.status(401).json({ error: "Student not found" });
+      return res.status(404).json({ error: "Student not found" });
     }
 
     if (student.is_paid) {
       return res.status(400).json({ error: "Student tuition already paid" });
     }
 
-    //create transaction
+    // Create transaction
     const transaction = await Transaction.create({
       payer_id: payer_id,
       student_id: student_id,
@@ -36,84 +39,153 @@ router.post("/initialize", async (req, res) => {
       status: "pending",
     });
 
-    //response
+    // Mock OTP sending
+    console.log(
+      `Sending OTP to user ${payer_id} for transaction ${transaction.id}`
+    );
+    const otpCode = "123456";
+
+    await transaction.update({ status: "otp_sent" });
+
     res.json({
-      message: "Transaction initialized successfully",
+      message: "Transaction created successfully. OTP sent to your email.",
       transaction: {
         id: transaction.id,
         student_id: transaction.student_id,
         amount: transaction.amount,
-        status: transaction.status,
+        status: "otp_sent",
       },
     });
   } catch (error) {
+    console.error("Initialize transaction error:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
-router.post("/complete", async (req, res) => {
+router.post("/send_otp", async (req, res) => {
   try {
-    //get info
-    const { otp_code, transaction_id } = req.body;
+    const { transaction_id } = req.body;
     const payer_id = req.user.userId;
+
+    // Validate input
+    if (!transaction_id) {
+      return res.status(400).json({ error: "Transaction ID is required" });
+    }
 
     const transaction = await Transaction.findOne({
       where: {
         id: transaction_id,
         payer_id: payer_id,
-        status: "pending",
+        status: ["pending", "otp_sent"],
       },
     });
 
-    //check
     if (!transaction) {
+      return res.status(404).json({
+        error: "Transaction not found or already completed",
+      });
+    }
+
+    console.log(
+      `Resending OTP to user ${payer_id} for transaction ${transaction_id}`
+    );
+
+    // Update transaction status to otp_sent
+    await transaction.update({ status: "otp_sent" });
+
+    res.json({
+      message: "OTP resent successfully. Check your email.",
+    });
+  } catch (error) {
+    console.error("Send OTP error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/complete", async (req, res) => {
+  const dbTransaction = await sequelize.transaction();
+
+  try {
+    const { otp_code, transaction_id } = req.body;
+    const payer_id = req.user.userId;
+
+    // Validate input
+    if (!otp_code || !transaction_id) {
       return res
-        .status(404)
-        .json({ error: "Transaction not found or already completed" });
+        .status(400)
+        .json({ error: "OTP code and transaction ID are required" });
     }
 
-    if (otp_code != "123456") {
-      return res.status(400).json({ error: "Invalid otp_code" });
+    const transaction = await Transaction.findOne({
+      where: {
+        id: transaction_id,
+        payer_id: payer_id,
+        status: "otp_sent",
+      },
+    });
+
+    if (!transaction) {
+      return res.status(404).json({
+        error: "Transaction not found or not ready for completion",
+      });
     }
 
+    // Verify OTP
+    if (otp_code !== "123456") {
+      return res.status(400).json({ error: "Invalid OTP code" });
+    }
+
+    // Get payer and verify balance
     const payer = await User.findByPk(payer_id);
-
-    if (payer.balance < transaction.amount) {
-      return res.status(400).json({ error: "Insufficent Balance" });
+    if (!payer) {
+      return res.status(404).json({ error: "Payer not found" });
     }
 
-    //start db processing
-    const newBalance = payer.balance - transaction.amount;
-    const dbTransaction = await sequelize.transaction();
-
-    try {
-      await User.update(
-        { balance: newBalance },
-        { where: { id: payer_id }, transaction: dbTransaction }
-      );
-      await Student.update(
-        { is_paid: true },
-        {
-          where: {
-            student_id: transaction.student_id,
-          },
-          transaction: dbTransaction,
-        }
-      );
-      await Transaction.update(
-        { status: "completed", completed_at: new Date() },
-        { where: { id: transaction_id }, transaction: dbTransaction }
-      );
-    } catch (error) {
-      await dbTransaction.rollback();
+    if (parseFloat(payer.balance) < parseFloat(transaction.amount)) {
+      return res.status(400).json({ error: "Insufficient balance" });
     }
+
+    // Calculate new balance
+    const newBalance =
+      parseFloat(payer.balance) - parseFloat(transaction.amount);
+
+    // Perform all database operations in transaction
+    await User.update(
+      { balance: newBalance.toString() },
+      { where: { id: payer_id }, transaction: dbTransaction }
+    );
+
+    await Student.update(
+      { is_paid: true },
+      {
+        where: { student_id: transaction.student_id },
+        transaction: dbTransaction,
+      }
+    );
+
+    await Transaction.update(
+      {
+        status: "completed",
+        completed_at: new Date(),
+      },
+      { where: { id: transaction_id }, transaction: dbTransaction }
+    );
 
     await dbTransaction.commit();
 
     res.json({
-      message: "Complete transaction!",
+      message: "Transaction completed successfully!",
+      transaction: {
+        id: transaction.id,
+        student_id: transaction.student_id,
+        amount: transaction.amount,
+        status: "completed",
+      },
+      new_balance: newBalance.toString(),
     });
   } catch (error) {
+    await dbTransaction.rollback();
+    console.error("Complete transaction error:", error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -41,4 +41,17 @@ router.post("/seed", async (req, res) => {
   }
 });
 
+router.post("/reduce-balance", async (req, res) => {
+  await User.update({ balance: 10000000 }, { where: { username: "testuser" } });
+  res.json({ message: "Balance reduced to 10M for testing" });
+});
+
+router.post("/increase-balance", async (req, res) => {
+  await User.update(
+    { balance: 100000000 },
+    { where: { username: "testuser" } }
+  );
+  res.json({ message: "Balance increase to 100M for testing" });
+});
+
 export default router;

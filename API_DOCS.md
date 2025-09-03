@@ -121,6 +121,151 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 }
 ```
 
+## Transaction Management
+
+**🔒 All transaction endpoints require JWT authentication**
+
+### POST /transactions/initialize
+
+Initialize a new payment transaction for a student's tuition. Automatically sends OTP to user's email.
+
+**Headers:**
+
+```
+Authorization: Bearer <your_jwt_token>
+Content-Type: application/json
+```
+
+**Request Body:**
+
+```json
+{
+  "student_id": "2021001234"
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "message": "Transaction created successfully. OTP sent to your email.",
+  "transaction": {
+    "id": 1,
+    "student_id": "2021001234",
+    "amount": "20000000",
+    "status": "otp_sent"
+  }
+}
+```
+
+**Response (Error - 404):**
+
+```json
+{
+  "error": "Student not found"
+}
+```
+
+**Response (Error - 400):**
+
+```json
+{
+  "error": "Student tuition already paid"
+}
+```
+
+### POST /transactions/send_otp
+
+Resend OTP for a pending or expired transaction.
+
+**Headers:**
+
+```
+Authorization: Bearer <your_jwt_token>
+Content-Type: application/json
+```
+
+**Request Body:**
+
+```json
+{
+  "transaction_id": 1
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "message": "OTP resent successfully. Check your email."
+}
+```
+
+**Response (Error - 404):**
+
+```json
+{
+  "error": "Transaction not found or already completed"
+}
+```
+
+### POST /transactions/complete
+
+Complete a payment transaction using OTP verification. Deducts balance and marks student as paid.
+
+**Headers:**
+
+```
+Authorization: Bearer <your_jwt_token>
+Content-Type: application/json
+```
+
+**Request Body:**
+
+```json
+{
+  "transaction_id": 1,
+  "otp_code": "123456"
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "message": "Transaction completed successfully!",
+  "transaction": {
+    "id": 1,
+    "student_id": "2021001234",
+    "amount": "20000000",
+    "status": "completed"
+  },
+  "new_balance": "30000000"
+}
+```
+
+**Response (Error - 400):**
+
+```json
+{
+  "error": "Invalid OTP code"
+}
+```
+
+```json
+{
+  "error": "Insufficient balance"
+}
+```
+
+**Response (Error - 404):**
+
+```json
+{
+  "error": "Transaction not found or not ready for completion"
+}
+```
+
 ## Development Routes
 
 ### POST /dev/seed
