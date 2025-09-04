@@ -11,6 +11,8 @@ import User from "./models/User.js";
 import Student from "./models/Student.js";
 import Transaction from "./models/Transaction.js";
 import TransactionHistory from "./models/TransactionHistory.js";
+import OtpCode from "./models/OtpCode.js";
+import TransactionLock from "./models/TransactionLock.js";
 
 // load environment variables
 dotenv.config();

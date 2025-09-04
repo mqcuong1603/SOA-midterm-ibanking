@@ -4,7 +4,29 @@ import User from "../models/User.js";
 import authMiddleware from "../middleware/auth.js";
 import Transaction from "../models/Transaction.js";
 import TransactionHistory from "../models/TransactionHistory.js";
+import TransactionLock from "../models/TransactionLock.js";
 import sequelize from "../config/database.js";
+import { Op } from "sequelize";
+import OtpCode from "../models/OtpCode.js";
+
+// OTP utility functions
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+const createOTP = async (transactionId) => {
+  const otpCode = generateOTP();
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+  await OtpCode.create({
+    transaction_id: transactionId,
+    otp_code: otpCode,
+    expires_at: expiresAt,
+    is_used: false,
+  });
+
+  return otpCode;
+};
 
 const router = express.Router();
 
@@ -32,6 +54,54 @@ router.post("/initialize", async (req, res) => {
       return res.status(400).json({ error: "Student tuition already paid" });
     }
 
+    //check uer lock
+    const existingUserLock = await TransactionLock.findOne({
+      where: {
+        resource_type: "user_account",
+        resource_id: payer_id.toString(),
+        expires_at: { [Op.gt]: new Date() },
+      },
+    });
+
+    if (existingUserLock) {
+      return res.status(409).json({
+        error:
+          "You already have a pending transaction. Please complete or wait for expiration",
+      });
+    }
+
+    //check student lock
+    const existingStudentLock = await TransactionLock.findOne({
+      where: {
+        resource_type: "student_tuition",
+        resource_id: student_id,
+        expires_at: { [Op.gt]: new Date() },
+      },
+    });
+
+    if (existingStudentLock) {
+      return res.status(409).json({
+        error:
+          "This student's payment is already being processed by another user.",
+      });
+    }
+
+    //create both locks
+    const lockExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+    await TransactionLock.bulkCreate([
+      {
+        resource_type: "user_account",
+        resource_id: payer_id.toString(),
+        expires_at: lockExpiry,
+      },
+      {
+        resource_type: "student_tuition",
+        resource_id: student_id,
+        expires_at: lockExpiry,
+      },
+    ]);
+
     // Create transaction
     const transaction = await Transaction.create({
       payer_id: payer_id,
@@ -41,10 +111,9 @@ router.post("/initialize", async (req, res) => {
     });
 
     // Mock OTP sending
-    console.log(
-      `Sending OTP to user ${payer_id} for transaction ${transaction.id}`
-    );
-    const otpCode = "123456";
+    const otpCode = await createOTP(transaction.id);
+    console.log(`Generated OTP ${otpCode} for transaction ${transaction.id}`);
+    // TODO: Send email with otpCode to user
 
     await transaction.update({ status: "otp_sent" });
 
@@ -181,6 +250,22 @@ router.post("/complete", async (req, res) => {
       },
       { transaction: dbTransaction }
     );
+
+    await TransactionLock.destroy({
+      where: {
+        [Op.or]: [
+          {
+            resource_type: "user_account",
+            resource_id: payer_id.toString(),
+          },
+          {
+            resource_type: "student_tuition",
+            resource_id: transaction.student_id,
+          },
+        ],
+      },
+      transaction: dbTransaction,
+    });
 
     await dbTransaction.commit();
 
