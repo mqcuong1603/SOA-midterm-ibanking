@@ -3,6 +3,7 @@ import Student from "../models/Student.js";
 import User from "../models/User.js";
 import authMiddleware from "../middleware/auth.js";
 import Transaction from "../models/Transaction.js";
+import TransactionHistory from "../models/TransactionHistory.js";
 import sequelize from "../config/database.js";
 
 const router = express.Router();
@@ -169,6 +170,16 @@ router.post("/complete", async (req, res) => {
         completed_at: new Date(),
       },
       { where: { id: transaction_id }, transaction: dbTransaction }
+    );
+
+    await TransactionHistory.create(
+      {
+        user_id: payer_id,
+        transaction_id: transaction_id,
+        balance_before: parseFloat(payer.balance),
+        balance_after: newBalance,
+      },
+      { transaction: dbTransaction }
     );
 
     await dbTransaction.commit();

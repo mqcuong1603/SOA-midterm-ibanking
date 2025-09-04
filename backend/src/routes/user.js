@@ -32,4 +32,31 @@ router.get("/profile", async (req, res) => {
   }
 });
 
+import TransactionHistory from "../models/TransactionHistory.js";
+
+router.get("/transactions", async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const history = await TransactionHistory.findAll({
+      where: { user_id: userId },
+      attributes: [
+        "id",
+        "transaction_id",
+        "balance_before",
+        "balance_after",
+        "created_at",
+      ],
+      order: [["created_at", "DESC"]],
+    });
+
+    res.json({
+      message: "Transaction history retrieved successfully",
+      history: history,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
