@@ -33,7 +33,7 @@ const OtpCode = sequelize.define(
   },
   {
     tableName: "otp_codes",
-    timestamps: false,
+    timestamps: true,
   }
 );
 

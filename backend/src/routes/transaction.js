@@ -156,9 +156,39 @@ router.post("/send_otp", async (req, res) => {
       });
     }
 
-    console.log(
-      `Resending OTP to user ${payer_id} for transaction ${transaction_id}`
+    //resend otp logic
+    const lastOtp = await OtpCode.findOne({
+      where: { transaction_id: transaction_id },
+      order: [["createdAt", "DESC"]], // Most recent first
+    });
+
+    if (lastOtp) {
+      const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+      if (lastOtp.createdAt > oneMinuteAgo) {
+        const remainingSeconds = Math.ceil(
+          (lastOtp.createdAt.getTime() + 60000 - Date.now()) / 1000
+        );
+        return res.status(429).json({
+          error: `Please wait ${remainingSeconds} seconds before
+  requesting new OTP`,
+        });
+      }
+    }
+
+    await OtpCode.update(
+      { is_used: true },
+      {
+        where: {
+          transaction_id: transaction_id,
+          is_used: false,
+        },
+      }
     );
+
+    const newOtpCode = await createOTP(transaction_id);
+    console.log(`Generated new OTP ${newOtpCode} for transaction
+  ${transaction_id}`);
+    // TODO: Send email with newOtpCode to user
 
     // Update transaction status to otp_sent
     await transaction.update({ status: "otp_sent" });
@@ -201,9 +231,23 @@ router.post("/complete", async (req, res) => {
     }
 
     // Verify OTP
-    if (otp_code !== "123456") {
-      return res.status(400).json({ error: "Invalid OTP code" });
+    const otpRecord = await OtpCode.findOne({
+      where: {
+        transaction_id: transaction_id,
+        otp_code: otp_code,
+        is_used: false,
+        expires_at: { [Op.gt]: new Date() },
+      },
+    });
+
+    if (!otpRecord) {
+      return res.status(400).json({
+        error: "Invalid or expired OTP code",
+      });
     }
+
+    //otp already use
+    await otpRecord.update({ is_used: true }, { transaction: dbTransaction });
 
     // Get payer and verify balance
     const payer = await User.findByPk(payer_id);
