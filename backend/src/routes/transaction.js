@@ -203,9 +203,59 @@ router.post("/complete", async (req, res) => {
 
     // Case 1: No OTP found (wrong code)
     if (!otpRecord) {
+      // Increment failed attempts counter
+      await transaction.increment("failed_otp_attempts", {
+        transaction: dbTransaction,
+      });
+      const currentFailures = transaction.failed_otp_attempts + 1;
+
+      // Check if too many failed attempts (3 attempts max)
+      if (currentFailures >= 3) {
+        // Lock transaction
+        await transaction.update(
+          {
+            status: "failed",
+            completed_at: new Date(),
+          },
+          { transaction: dbTransaction }
+        );
+
+        // Release resource locks
+        await TransactionLock.destroy(
+          {
+            where: {
+              [Op.or]: [
+                {
+                  resource_type: "user_account",
+                  resource_id: payer_id.toString(),
+                },
+                {
+                  resource_type: "student_tuition",
+                  resource_id: transaction.student_id,
+                },
+              ],
+            },
+          },
+          { transaction: dbTransaction }
+        );
+
+        await dbTransaction.commit();
+        return res.status(423).json({
+          error:
+            "Transaction locked due to multiple failed OTP attempts. Please start a new payment.",
+          error_code: "TOO_MANY_ATTEMPTS",
+          failed_attempts: currentFailures,
+          transaction_status: "failed",
+        });
+      }
+
+      // Still have attempts left
+      await dbTransaction.commit();
       return res.status(400).json({
         error: "Invalid OTP code",
         error_code: "INVALID_OTP",
+        failed_attempts: currentFailures,
+        remaining_attempts: 3 - currentFailures,
       });
     }
 

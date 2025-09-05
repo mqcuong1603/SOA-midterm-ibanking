@@ -39,6 +39,11 @@ const Transaction = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true,
     },
+    failed_otp_attempts: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
   },
   {
     tableName: "transactions",
