@@ -8,87 +8,71 @@ import TransactionLock from "../models/TransactionLock.js";
 import sequelize from "../config/database.js";
 import { Op } from "sequelize";
 import OtpCode from "../models/OtpCode.js";
+import { sendOTPEmail } from "../services/emailService.js";
+
+const router = express.Router();
+router.use(authMiddleware);
 
 // OTP utility functions
-const generateOTP = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-};
+const generateOTP = () =>
+  Math.floor(100000 + Math.random() * 900000).toString();
 
 const createOTP = async (transactionId) => {
   const otpCode = generateOTP();
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
   await OtpCode.create({
     transaction_id: transactionId,
     otp_code: otpCode,
     expires_at: expiresAt,
     is_used: false,
   });
-
   return otpCode;
 };
 
-const router = express.Router();
-
-router.use(authMiddleware);
-
+// Initialize transaction
 router.post("/initialize", async (req, res) => {
   try {
     const { student_id } = req.body;
     const payer_id = req.user.userId;
 
-    // Validate input
-    if (!student_id) {
+    if (!student_id)
       return res.status(400).json({ error: "Student ID is required" });
-    }
 
-    const student = await Student.findOne({
-      where: { student_id: student_id },
-    });
-
-    if (!student) {
-      return res.status(404).json({ error: "Student not found" });
-    }
-
-    if (student.is_paid) {
+    const student = await Student.findOne({ where: { student_id } });
+    if (!student) return res.status(404).json({ error: "Student not found" });
+    if (student.is_paid)
       return res.status(400).json({ error: "Student tuition already paid" });
-    }
 
-    //check uer lock
-    const existingUserLock = await TransactionLock.findOne({
-      where: {
-        resource_type: "user_account",
-        resource_id: payer_id.toString(),
-        expires_at: { [Op.gt]: new Date() },
-      },
-    });
-
-    if (existingUserLock) {
+    // Check locks
+    const [existingUserLock, existingStudentLock] = await Promise.all([
+      TransactionLock.findOne({
+        where: {
+          resource_type: "user_account",
+          resource_id: payer_id.toString(),
+          expires_at: { [Op.gt]: new Date() },
+        },
+      }),
+      TransactionLock.findOne({
+        where: {
+          resource_type: "student_tuition",
+          resource_id: student_id,
+          expires_at: { [Op.gt]: new Date() },
+        },
+      }),
+    ]);
+    if (existingUserLock)
       return res.status(409).json({
         error:
           "You already have a pending transaction. Please complete or wait for expiration",
       });
-    }
-
-    //check student lock
-    const existingStudentLock = await TransactionLock.findOne({
-      where: {
-        resource_type: "student_tuition",
-        resource_id: student_id,
-        expires_at: { [Op.gt]: new Date() },
-      },
-    });
-
-    if (existingStudentLock) {
+    if (existingStudentLock)
       return res.status(409).json({
         error:
           "This student's payment is already being processed by another user.",
       });
-    }
 
-    //create both locks
+    // Create locks
     const lockExpiry = new Date(Date.now() + 5 * 60 * 1000);
-
     await TransactionLock.bulkCreate([
       {
         resource_type: "user_account",
@@ -104,16 +88,17 @@ router.post("/initialize", async (req, res) => {
 
     // Create transaction
     const transaction = await Transaction.create({
-      payer_id: payer_id,
-      student_id: student_id,
+      payer_id,
+      student_id,
       amount: student.tuition_amount,
       status: "pending",
     });
 
-    // Mock OTP sending
+    // Send OTP
     const otpCode = await createOTP(transaction.id);
+    const user = await User.findByPk(payer_id);
+    await sendOTPEmail(user.email, otpCode, student);
     console.log(`Generated OTP ${otpCode} for transaction ${transaction.id}`);
-    // TODO: Send email with otpCode to user
 
     await transaction.update({ status: "otp_sent" });
 
@@ -132,36 +117,31 @@ router.post("/initialize", async (req, res) => {
   }
 });
 
+// Resend OTP
 router.post("/send_otp", async (req, res) => {
   try {
     const { transaction_id } = req.body;
     const payer_id = req.user.userId;
-
-    // Validate input
-    if (!transaction_id) {
+    if (!transaction_id)
       return res.status(400).json({ error: "Transaction ID is required" });
-    }
 
     const transaction = await Transaction.findOne({
       where: {
         id: transaction_id,
-        payer_id: payer_id,
+        payer_id,
         status: ["pending", "otp_sent"],
       },
     });
+    if (!transaction)
+      return res
+        .status(404)
+        .json({ error: "Transaction not found or already completed" });
 
-    if (!transaction) {
-      return res.status(404).json({
-        error: "Transaction not found or already completed",
-      });
-    }
-
-    //resend otp logic
+    // Prevent spamming OTP
     const lastOtp = await OtpCode.findOne({
-      where: { transaction_id: transaction_id },
-      order: [["createdAt", "DESC"]], // Most recent first
+      where: { transaction_id },
+      order: [["createdAt", "DESC"]],
     });
-
     if (lastOtp) {
       const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
       if (lastOtp.createdAt > oneMinuteAgo) {
@@ -169,106 +149,122 @@ router.post("/send_otp", async (req, res) => {
           (lastOtp.createdAt.getTime() + 60000 - Date.now()) / 1000
         );
         return res.status(429).json({
-          error: `Please wait ${remainingSeconds} seconds before
-  requesting new OTP`,
+          error: `Please wait ${remainingSeconds} seconds before requesting new OTP`,
         });
       }
     }
 
     await OtpCode.update(
       { is_used: true },
-      {
-        where: {
-          transaction_id: transaction_id,
-          is_used: false,
-        },
-      }
+      { where: { transaction_id, is_used: false } }
     );
-
     const newOtpCode = await createOTP(transaction_id);
-    console.log(`Generated new OTP ${newOtpCode} for transaction
-  ${transaction_id}`);
-    // TODO: Send email with newOtpCode to user
+    const user = await User.findByPk(transaction.payer_id);
+    const student = await Student.findOne({
+      where: { student_id: transaction.student_id },
+    });
+    await sendOTPEmail(user.email, newOtpCode, student);
 
-    // Update transaction status to otp_sent
+    console.log(
+      `Generated new OTP ${newOtpCode} for transaction ${transaction_id}`
+    );
     await transaction.update({ status: "otp_sent" });
 
-    res.json({
-      message: "OTP resent successfully. Check your email.",
-    });
+    res.json({ message: "OTP resent successfully. Check your email." });
   } catch (error) {
     console.error("Send OTP error:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
+// Complete transaction
 router.post("/complete", async (req, res) => {
   const dbTransaction = await sequelize.transaction();
-
   try {
     const { otp_code, transaction_id } = req.body;
     const payer_id = req.user.userId;
-
-    // Validate input
-    if (!otp_code || !transaction_id) {
+    if (!otp_code || !transaction_id)
       return res
         .status(400)
         .json({ error: "OTP code and transaction ID are required" });
-    }
 
     const transaction = await Transaction.findOne({
-      where: {
-        id: transaction_id,
-        payer_id: payer_id,
-        status: "otp_sent",
-      },
+      where: { id: transaction_id, payer_id, status: "otp_sent" },
     });
+    if (!transaction)
+      return res
+        .status(404)
+        .json({ error: "Transaction not found or not ready for completion" });
 
-    if (!transaction) {
-      return res.status(404).json({
-        error: "Transaction not found or not ready for completion",
-      });
-    }
-
-    // Verify OTP
+    // OTP VERIFICATION
     const otpRecord = await OtpCode.findOne({
-      where: {
-        transaction_id: transaction_id,
-        otp_code: otp_code,
-        is_used: false,
-        expires_at: { [Op.gt]: new Date() },
-      },
+      where: { transaction_id, otp_code, is_used: false },
     });
 
+    // Case 1: No OTP found (wrong code)
     if (!otpRecord) {
       return res.status(400).json({
-        error: "Invalid or expired OTP code",
+        error: "Invalid OTP code",
+        error_code: "INVALID_OTP",
       });
     }
 
-    //otp already use
-    await otpRecord.update({ is_used: true }, { transaction: dbTransaction });
+    // Case 2: Correct OTP but expired
+    if (otpRecord.expires_at < new Date()) {
+      await transaction.update(
+        { status: "failed", completed_at: new Date() },
+        { transaction: dbTransaction }
+      );
 
-    // Get payer and verify balance
-    const payer = await User.findByPk(payer_id);
-    if (!payer) {
-      return res.status(404).json({ error: "Payer not found" });
+      // Release resource locks
+      await TransactionLock.destroy(
+        {
+          where: {
+            [Op.or]: [
+              {
+                resource_type: "user_account",
+                resource_id: payer_id.toString(),
+              },
+              {
+                resource_type: "student_tuition",
+                resource_id: transaction.student_id,
+              },
+            ],
+          },
+        },
+        { transaction: dbTransaction }
+      );
+
+      await dbTransaction.commit();
+      return res.status(400).json({
+        error: "OTP has expired. Transaction has been cancelled.",
+        error_code: "OTP_EXPIRED",
+        transaction_status: "failed",
+      });
     }
 
+    // Case 3: Valid OTP - mark as used and continue
+    await otpRecord.update({ is_used: true }, { transaction: dbTransaction });
+
+    // Check payer and balance
+    const payer = await User.findByPk(payer_id);
+    if (!payer) {
+      await dbTransaction.rollback();
+      return res.status(404).json({ error: "Payer not found" });
+    }
     if (parseFloat(payer.balance) < parseFloat(transaction.amount)) {
+      await dbTransaction.rollback();
       return res.status(400).json({ error: "Insufficient balance" });
     }
 
-    // Calculate new balance
     const newBalance =
       parseFloat(payer.balance) - parseFloat(transaction.amount);
 
-    // Perform all database operations in transaction
+    // Atomic updates
     await User.update(
       { balance: newBalance.toString() },
       { where: { id: payer_id }, transaction: dbTransaction }
     );
-
     await Student.update(
       { is_paid: true },
       {
@@ -276,32 +272,23 @@ router.post("/complete", async (req, res) => {
         transaction: dbTransaction,
       }
     );
-
     await Transaction.update(
-      {
-        status: "completed",
-        completed_at: new Date(),
-      },
+      { status: "completed", completed_at: new Date() },
       { where: { id: transaction_id }, transaction: dbTransaction }
     );
-
     await TransactionHistory.create(
       {
         user_id: payer_id,
-        transaction_id: transaction_id,
+        transaction_id,
         balance_before: parseFloat(payer.balance),
         balance_after: newBalance,
       },
       { transaction: dbTransaction }
     );
-
     await TransactionLock.destroy({
       where: {
         [Op.or]: [
-          {
-            resource_type: "user_account",
-            resource_id: payer_id.toString(),
-          },
+          { resource_type: "user_account", resource_id: payer_id.toString() },
           {
             resource_type: "student_tuition",
             resource_id: transaction.student_id,
