@@ -1,0 +1,17 @@
+Lưu ý khi làm bài:
+
+- Mấy em chỉ nên làm trong folder frontend. Đừng đụng vào folder backend, hoặc nếu cần chỉnh sửa nhắn anh.
+
+-ở root folder thì terminal gõ "docker compose up -d" để chạy mysql server (nếu tụi em chưa có sql server, nếu có rồi bỏ qua). Tất nhiên phải tải Docker mới chạy được.
+
+-cd vào folder backend gõ "npm run dev" để chạy backend
+
+-Thông tin bài làm có ở midterm1.png, midterm2.png, ERD.pdf.
+
+-SOA-midterm.postman_collection.json dùng để import api collection để test api. Dùng nếu cần. Tất nhiên phải có Postman.
+
+-Quan trọng: khi sử dụng github phải qua branch khác làm, làm xong mới merge lại branch master, tránh làm lỗi.
+
+-file .env anh gửi trong group add vào folder backend.
+
+-muốn email gửi về emaiil mấy em thì thêm user của tụi em vào file /backend/src/config/database

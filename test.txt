@@ -1,5 +1,0 @@
-API design:
-    method: post,
-    endpoint: /api/transactions/initialize
-    body: nothing ?
-    response: dont know
