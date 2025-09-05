@@ -384,63 +384,6 @@ Content-Type: application/json
 }
 ```
 
-## Development Routes
-
-**⚠️ Development/Testing endpoints - Not for production use**
-
-### POST /dev/seed
-
-Create test data for development purposes.
-
-- Creates test user: `testuser` / `123456` with 50M VND balance
-- Creates 2 test students with unpaid tuition
-
-**Request Body:**
-
-```json
-{}
-```
-
-**Response (Success - 200):**
-
-```json
-{
-  "message": "Test data created successfully!"
-}
-```
-
-**Response (Error - 400):**
-
-```json
-{
-  "error": "Validation error"
-}
-```
-
-### POST /dev/reduce-balance
-
-Reduce test user's balance to 10M VND for testing insufficient balance scenarios.
-
-**Response (Success - 200):**
-
-```json
-{
-  "message": "Balance reduced to 10M for testing"
-}
-```
-
-### POST /dev/increase-balance
-
-Increase test user's balance to 100M VND for testing high balance scenarios.
-
-**Response (Success - 200):**
-
-```json
-{
-  "message": "Balance increase to 100M for testing"
-}
-```
-
 ## Security Features
 
 ### Resource Locking
@@ -475,3 +418,205 @@ Increase test user's balance to 100M VND for testing high balance scenarios.
 | 409  | Conflict          | Resource locks (user busy, student being paid)       |
 | 429  | Too Many Requests | OTP cooldown protection                              |
 | 500  | Server Error      | Database errors, system failures                     |
+
+## Complete API Testing Guide
+
+### Testing with cURL
+
+#### 1. Login to get JWT token
+
+```bash
+curl -X POST http://localhost:4000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "testuser",
+    "password": "123456"
+  }'
+```
+
+#### 2. Get user profile
+
+```bash
+curl -X GET http://localhost:4000/api/user/profile \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+#### 3. Get student information
+
+```bash
+curl -X GET http://localhost:4000/api/student/2021001234 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+#### 4. Initialize payment transaction
+
+```bash
+curl -X POST http://localhost:4000/api/transaction/initialize \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "student_id": "2021001234"
+  }'
+```
+
+#### 5. Resend OTP (if needed)
+
+```bash
+curl -X POST http://localhost:4000/api/transaction/send_otp \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "transaction_id": 1
+  }'
+```
+
+#### 6. Complete transaction with OTP
+
+```bash
+curl -X POST http://localhost:4000/api/transaction/complete \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "transaction_id": 1,
+    "otp_code": "123456"
+  }'
+```
+
+#### 7. Get transaction history
+
+```bash
+curl -X GET http://localhost:4000/api/user/transactions \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+### Testing Scenarios
+
+#### Scenario A: Successful Payment Flow
+
+1. Login → Get JWT token
+2. Check student info (should show unpaid tuition)
+3. Initialize transaction → OTP sent
+4. Complete transaction with correct OTP
+5. Check user balance (should be reduced)
+6. Check student info again (should show paid)
+7. View transaction history
+
+#### Scenario B: Invalid OTP Testing
+
+1. Initialize transaction
+2. Complete with wrong OTP code (e.g., "999999")
+3. Should get "Invalid OTP code" error
+4. Transaction should remain in "otp_sent" status
+
+#### Scenario C: Expired OTP Testing
+
+1. Initialize transaction
+2. Wait 6+ minutes (OTP expires after 5 minutes)
+3. Complete with any OTP code
+4. Should get "OTP has expired" error
+5. Transaction should be marked as "failed"
+
+#### Scenario D: Insufficient Balance Testing
+
+1. Reduce user balance in database: `UPDATE users SET balance = '1000000' WHERE username = 'testuser';`
+2. Initialize transaction (should succeed)
+3. Complete with correct OTP
+4. Should get "Insufficient balance" error
+
+#### Scenario E: Resource Locking Testing
+
+1. Initialize transaction for student "2021001234"
+2. Try to initialize another transaction for same student (different user)
+3. Should get conflict error about student being processed
+4. Try to initialize transaction for different student (same user)
+5. Should get conflict error about user having pending transaction
+
+#### Scenario F: OTP Rate Limiting Testing
+
+1. Initialize transaction
+2. Request OTP resend immediately
+3. Should succeed
+4. Request OTP resend again within 60 seconds
+5. Should get rate limit error with countdown
+
+### Error Response Examples
+
+#### Authentication Errors
+
+```json
+{
+  "error": "No token provided"
+}
+```
+
+```json
+{
+  "error": "Invalid token"
+}
+```
+
+#### Transaction Errors
+
+```json
+{
+  "error": "Invalid OTP code",
+  "error_code": "INVALID_OTP"
+}
+```
+
+```json
+{
+  "error": "OTP has expired. Transaction has been cancelled.",
+  "error_code": "OTP_EXPIRED",
+  "transaction_status": "failed"
+}
+```
+
+```json
+{
+  "error": "You already have a pending transaction. Please complete or wait for expiration"
+}
+```
+
+```json
+{
+  "error": "Please wait 45 seconds before requesting new OTP"
+}
+```
+
+### Postman Collection Setup
+
+Import these settings into Postman for easier testing:
+
+1. **Environment Variables**:
+
+   - `baseUrl`: `http://localhost:4000/api`
+   - `token`: `{{token}}` (auto-updated from login response)
+
+2. **Headers**:
+
+   - `Authorization`: `Bearer {{token}}`
+   - `Content-Type`: `application/json`
+
+3. **Auto-token Script** (in login request's Tests tab):
+
+```javascript
+pm.test("Login successful", function () {
+  pm.response.to.have.status(200);
+  const response = pm.response.json();
+  pm.environment.set("token", response.token);
+});
+```
+
+### Database Schema Overview
+
+The API uses the following main tables:
+
+- **users**: User accounts with balances
+- **students**: Student records with tuition amounts
+- **transactions**: Payment transactions with status tracking
+- **otp_codes**: Real OTP codes with expiration
+- **transaction_history**: Balance change history
+- **transaction_locks**: Resource locking for concurrency control
+
+This completes the comprehensive API documentation for the Banking/iBanking Tuition Payment System.
