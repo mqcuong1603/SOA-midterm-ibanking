@@ -330,6 +330,7 @@ Complete a payment transaction using OTP verification.
 - Deducts user balance and marks student as paid
 - Creates transaction history record
 - Releases resource locks
+- **Sends payment confirmation email** with transaction details
 
 **Headers:**
 
@@ -400,6 +401,14 @@ Content-Type: application/json
 - **Single-use**: OTP codes marked as used after validation
 - **Cooldown**: 1-minute between OTP requests
 - **Rate limiting**: HTTP 429 for spam prevention
+
+### Email Notifications
+
+- **OTP Delivery**: 6-digit verification codes sent to user's email
+- **Payment Confirmation**: Detailed receipt sent after successful payment
+- **Professional Templates**: HTML emails with transaction summaries
+- **Security Information**: Payment details, account balance updates
+- **Non-intrusive**: Email failures don't affect transaction processing
 
 ### Database Safety
 

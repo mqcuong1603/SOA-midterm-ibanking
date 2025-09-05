@@ -8,7 +8,10 @@ import TransactionLock from "../models/TransactionLock.js";
 import sequelize from "../config/database.js";
 import { Op } from "sequelize";
 import OtpCode from "../models/OtpCode.js";
-import { sendOTPEmail } from "../services/emailService.js";
+import {
+  sendOTPEmail,
+  sendPaymentConfirmationEmail,
+} from "../services/emailService.js";
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -349,6 +352,45 @@ router.post("/complete", async (req, res) => {
     });
 
     await dbTransaction.commit();
+
+    // Get student information for confirmation email
+    const student = await Student.findOne({
+      where: { student_id: transaction.student_id },
+    });
+
+    // Send payment confirmation email
+    try {
+      const paymentData = {
+        transaction: {
+          id: transaction.id,
+          amount: transaction.amount,
+        },
+        student: {
+          student_id: student.student_id,
+          full_name: student.full_name,
+        },
+        payer: {
+          full_name: payer.full_name,
+          balance: payer.balance,
+        },
+        newBalance: newBalance.toString(),
+      };
+
+      const emailResult = await sendPaymentConfirmationEmail(
+        payer.email,
+        paymentData
+      );
+      if (emailResult.success) {
+        console.log(`✅ Confirmation email sent to ${payer.email}`);
+      } else {
+        console.error(
+          `❌ Failed to send confirmation email: ${emailResult.error}`
+        );
+      }
+    } catch (emailError) {
+      console.error("❌ Error sending confirmation email:", emailError.message);
+      // Don't fail the transaction if email fails
+    }
 
     res.json({
       message: "Transaction completed successfully!",
