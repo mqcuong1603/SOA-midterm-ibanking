@@ -14,4 +14,4 @@ Lưu ý khi làm bài:
 
 -file .env anh gửi trong group add vào folder backend.
 
--muốn email gửi về emaiil mấy em thì thêm user của tụi em vào file /backend/src/config/database
+-muốn email gửi về emaiil mấy em thì thêm user của tụi em vào file /backend/src/config/initDatabase.js
