@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Thanh toán học phí - SmartBank</title>
+  <link rel="stylesheet" href="../assets/css/main.css">
+</head>
+<body>
+  <div data-include="../components/header.html"></div>
+
+  <div class="container">
+    <h2>Thanh toán học phí</h2>
+    <form id="paymentForm">
+      <label>Mã sinh viên</label>
+      <input type="text" id="studentId" placeholder="Nhập MSSV..." required>
+      <button type="button" id="fetchInfo">Lấy thông tin</button>
+
+      <div id="studentInfo" style="display:none; margin-top:20px;">
+        <p><b>Họ tên:</b> <span id="studentName"></span></p>
+        <p><b>Số tiền:</b> <span id="studentFee"></span> VND</p>
+        <button type="submit">Xác nhận thanh toán</button>
+      </div>
+    </form>
+  </div>
+
+  <div data-include="../components/footer.html"></div>
+</body>
+</html>
+<script src="../assets/js/utils/validation.js"></script>
+<script src="../assets/js/components/modal.js"></script>
+<script src="../assets/js/utils/api.js"></script>
+<script src="../assets/js/payment.js"></script>
+
