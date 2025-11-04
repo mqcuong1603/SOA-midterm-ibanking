@@ -8,24 +8,28 @@ const Student = sequelize.define(
       type: DataTypes.STRING(20),
       primaryKey: true,
       allowNull: false,
+      comment: "Student ID (MSSV)",
     },
     full_name: {
       type: DataTypes.STRING(100),
       allowNull: false,
     },
-    tuition_amount: {
-      type: DataTypes.DECIMAL(18, 0),
-      allowNull: false,
+    major: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      comment: "Student major/program",
     },
-    is_paid: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: false,
+    enrollment_year: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: "Year student enrolled",
     },
   },
   {
     tableName: "students",
-    timestamps: false,
+    timestamps: true,
+    createdAt: "created_at",
+    updatedAt: "updated_at",
   }
 );
 

@@ -10,8 +10,9 @@ const TransactionLock = sequelize.define(
       autoIncrement: true,
     },
     resource_type: {
-      type: DataTypes.ENUM("user_account", "student_tuition"),
+      type: DataTypes.ENUM("user_account", "student_tuition", "semester_tuition"),
       allowNull: false,
+      comment: "Type of resource being locked",
     },
     resource_id: {
       type: DataTypes.STRING(50),

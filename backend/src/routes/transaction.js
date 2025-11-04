@@ -1,5 +1,6 @@
 import express from "express";
 import Student from "../models/Student.js";
+import StudentTuition from "../models/StudentTuition.js";
 import User from "../models/User.js";
 import authMiddleware from "../middleware/auth.js";
 import Transaction from "../models/Transaction.js";
@@ -15,6 +16,58 @@ import {
 
 const router = express.Router();
 router.use(authMiddleware);
+
+// Get available semesters for a student
+router.get("/semesters/:student_id", async (req, res) => {
+  try {
+    const { student_id } = req.params;
+    const { show_all } = req.query; // Optional: show all semesters or only unpaid
+
+    if (!student_id)
+      return res.status(400).json({ error: "Student ID is required" });
+
+    // Verify student exists
+    const student = await Student.findOne({ where: { student_id } });
+    if (!student) return res.status(404).json({ error: "Student not found" });
+
+    // Build query conditions
+    const whereClause = { student_id };
+    if (show_all !== "true") {
+      whereClause.is_paid = false; // Only show unpaid by default
+    }
+
+    // Get all semesters for this student
+    const semesters = await StudentTuition.findAll({
+      where: whereClause,
+      order: [
+        ["academic_year", "DESC"],
+        ["semester", "ASC"],
+      ],
+    });
+
+    res.json({
+      student: {
+        student_id: student.student_id,
+        full_name: student.full_name,
+        major: student.major,
+      },
+      semesters: semesters.map((sem) => ({
+        id: sem.id,
+        semester: sem.semester,
+        academic_year: sem.academic_year,
+        tuition_amount: sem.tuition_amount,
+        is_paid: sem.is_paid,
+        paid_at: sem.paid_at,
+      })),
+      total_unpaid: semesters
+        .filter((s) => !s.is_paid)
+        .reduce((sum, s) => sum + parseFloat(s.tuition_amount), 0),
+    });
+  } catch (error) {
+    console.error("Get semesters error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // OTP utility functions
 const generateOTP = () =>
@@ -35,19 +88,32 @@ const createOTP = async (transactionId) => {
 // Initialize transaction
 router.post("/initialize", async (req, res) => {
   try {
-    const { student_id } = req.body;
+    const { student_id, tuition_id } = req.body;
     const payer_id = req.user.userId;
 
-    if (!student_id)
-      return res.status(400).json({ error: "Student ID is required" });
+    if (!student_id || !tuition_id)
+      return res
+        .status(400)
+        .json({ error: "Student ID and Tuition ID are required" });
 
+    // Fetch student and semester tuition info
     const student = await Student.findOne({ where: { student_id } });
     if (!student) return res.status(404).json({ error: "Student not found" });
-    if (student.is_paid)
-      return res.status(400).json({ error: "Student tuition already paid" });
+
+    const tuition = await StudentTuition.findOne({
+      where: { id: tuition_id, student_id },
+    });
+    if (!tuition)
+      return res
+        .status(404)
+        .json({ error: "Tuition record not found for this student" });
+    if (tuition.is_paid)
+      return res
+        .status(400)
+        .json({ error: "This semester tuition is already paid" });
 
     // Check locks
-    const [existingUserLock, existingStudentLock] = await Promise.all([
+    const [existingUserLock, existingSemesterLock] = await Promise.all([
       TransactionLock.findOne({
         where: {
           resource_type: "user_account",
@@ -57,8 +123,8 @@ router.post("/initialize", async (req, res) => {
       }),
       TransactionLock.findOne({
         where: {
-          resource_type: "student_tuition",
-          resource_id: student_id,
+          resource_type: "semester_tuition",
+          resource_id: tuition_id.toString(),
           expires_at: { [Op.gt]: new Date() },
         },
       }),
@@ -68,10 +134,10 @@ router.post("/initialize", async (req, res) => {
         error:
           "You already have a pending transaction. Please complete or wait for expiration",
       });
-    if (existingStudentLock)
+    if (existingSemesterLock)
       return res.status(409).json({
         error:
-          "This student's payment is already being processed by another user.",
+          "This semester tuition payment is already being processed by another user.",
       });
 
     // Create locks
@@ -83,8 +149,8 @@ router.post("/initialize", async (req, res) => {
         expires_at: lockExpiry,
       },
       {
-        resource_type: "student_tuition",
-        resource_id: student_id,
+        resource_type: "semester_tuition",
+        resource_id: tuition_id.toString(),
         expires_at: lockExpiry,
       },
     ]);
@@ -93,14 +159,22 @@ router.post("/initialize", async (req, res) => {
     const transaction = await Transaction.create({
       payer_id,
       student_id,
-      amount: student.tuition_amount,
+      tuition_id,
+      amount: tuition.tuition_amount,
       status: "pending",
     });
 
     // Send OTP
     const otpCode = await createOTP(transaction.id);
     const user = await User.findByPk(payer_id);
-    await sendOTPEmail(user.email, otpCode, student);
+    const emailData = {
+      student_id: student.student_id,
+      full_name: student.full_name,
+      semester: tuition.semester,
+      academic_year: tuition.academic_year,
+      tuition_amount: tuition.tuition_amount,
+    };
+    await sendOTPEmail(user.email, otpCode, emailData);
     console.log(`Generated OTP ${otpCode} for transaction ${transaction.id}`);
 
     await transaction.update({ status: "otp_sent" });
@@ -110,6 +184,9 @@ router.post("/initialize", async (req, res) => {
       transaction: {
         id: transaction.id,
         student_id: transaction.student_id,
+        tuition_id: transaction.tuition_id,
+        semester: tuition.semester,
+        academic_year: tuition.academic_year,
         amount: transaction.amount,
         status: "otp_sent",
       },
@@ -166,7 +243,15 @@ router.post("/send_otp", async (req, res) => {
     const student = await Student.findOne({
       where: { student_id: transaction.student_id },
     });
-    await sendOTPEmail(user.email, newOtpCode, student);
+    const tuition = await StudentTuition.findByPk(transaction.tuition_id);
+    const emailData = {
+      student_id: student.student_id,
+      full_name: student.full_name,
+      semester: tuition.semester,
+      academic_year: tuition.academic_year,
+      tuition_amount: tuition.tuition_amount,
+    };
+    await sendOTPEmail(user.email, newOtpCode, emailData);
 
     console.log(
       `Generated new OTP ${newOtpCode} for transaction ${transaction_id}`
@@ -233,8 +318,8 @@ router.post("/complete", async (req, res) => {
                   resource_id: payer_id.toString(),
                 },
                 {
-                  resource_type: "student_tuition",
-                  resource_id: transaction.student_id,
+                  resource_type: "semester_tuition",
+                  resource_id: transaction.tuition_id.toString(),
                 },
               ],
             },
@@ -279,8 +364,8 @@ router.post("/complete", async (req, res) => {
                 resource_id: payer_id.toString(),
               },
               {
-                resource_type: "student_tuition",
-                resource_id: transaction.student_id,
+                resource_type: "semester_tuition",
+                resource_id: transaction.tuition_id.toString(),
               },
             ],
           },
@@ -318,10 +403,10 @@ router.post("/complete", async (req, res) => {
       { balance: newBalance.toString() },
       { where: { id: payer_id }, transaction: dbTransaction }
     );
-    await Student.update(
-      { is_paid: true },
+    await StudentTuition.update(
+      { is_paid: true, paid_at: new Date() },
       {
-        where: { student_id: transaction.student_id },
+        where: { id: transaction.tuition_id },
         transaction: dbTransaction,
       }
     );
@@ -343,8 +428,8 @@ router.post("/complete", async (req, res) => {
         [Op.or]: [
           { resource_type: "user_account", resource_id: payer_id.toString() },
           {
-            resource_type: "student_tuition",
-            resource_id: transaction.student_id,
+            resource_type: "semester_tuition",
+            resource_id: transaction.tuition_id.toString(),
           },
         ],
       },
@@ -353,10 +438,11 @@ router.post("/complete", async (req, res) => {
 
     await dbTransaction.commit();
 
-    // Get student information for confirmation email
+    // Get student and tuition information for confirmation email
     const student = await Student.findOne({
       where: { student_id: transaction.student_id },
     });
+    const tuition = await StudentTuition.findByPk(transaction.tuition_id);
 
     // Send payment confirmation email
     try {
@@ -368,6 +454,10 @@ router.post("/complete", async (req, res) => {
         student: {
           student_id: student.student_id,
           full_name: student.full_name,
+        },
+        semester: {
+          semester: tuition.semester,
+          academic_year: tuition.academic_year,
         },
         payer: {
           full_name: payer.full_name,

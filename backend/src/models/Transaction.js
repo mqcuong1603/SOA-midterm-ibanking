@@ -26,9 +26,19 @@ const Transaction = sequelize.define(
         key: "student_id",
       },
     },
-    amount: {
-      type: DataTypes.DECIMAL(18, 0),
+    tuition_id: {
+      type: DataTypes.INTEGER,
       allowNull: false,
+      references: {
+        model: "student_tuition",
+        key: "id",
+      },
+      comment: "References student_tuition.id",
+    },
+    amount: {
+      type: DataTypes.DECIMAL(15, 2),
+      allowNull: false,
+      comment: "Transaction amount in VND",
     },
     status: {
       type: DataTypes.ENUM("pending", "otp_sent", "completed", "failed"),
