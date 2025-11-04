@@ -9,10 +9,13 @@ import studentRoute from "./routes/student.js";
 import transactionRoute from "./routes/transaction.js";
 import userRoute from "./routes/user.js";
 import cors from "cors";
-import defineAssociations from "./models/associations.js";
-
-// Define model associations
-defineAssociations();
+import User from "./models/User.js";
+import Student from "./models/Student.js";
+import StudentTuition from "./models/StudentTuition.js";
+import Transaction from "./models/Transaction.js";
+import TransactionHistory from "./models/TransactionHistory.js";
+import OtpCode from "./models/OtpCode.js";
+import TransactionLock from "./models/TransactionLock.js";
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);

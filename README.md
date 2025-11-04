@@ -57,7 +57,7 @@ A secure banking API system for tuition payments with JWT authentication, OTP ve
    ```
 
 4. **Access API**
-   - Server: http://localhost:4000
+   - Server: <http://localhost:4000>
    - API Docs: See [API_DOCS.md](API_DOCS.md)
 
 ### API Testing Tools
