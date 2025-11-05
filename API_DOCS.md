@@ -1,4 +1,4 @@
-# Banking/iBanking Tuition Payment System - API Documentation
+# iBanking Tuition Payment System - API Documentation
 
 ## Base URL
 
@@ -8,13 +8,17 @@ http://localhost:4000/api
 
 ## Overview
 
-This API provides a complete banking system for tuition payments with:
+This API provides a complete banking system for student tuition payments with enhanced security features:
 
-- JWT-based authentication
-- Real OTP verification system (6-digit codes, 5-minute expiration)
-- Resource locking to prevent concurrent payments
-- Transaction history tracking
-- Balance management with atomic operations
+- **JWT-based authentication** - Secure token-based access control
+- **Real OTP verification system** - 6-digit codes with 5-minute expiration
+- **Multi-semester support** - Pay specific semesters for any student
+- **Resource locking** - Prevents concurrent payment conflicts
+- **Transaction history tracking** - Complete audit trail
+- **Email notifications** - OTP delivery and payment confirmations
+- **Atomic operations** - Database transactions ensure data consistency
+- **Rate limiting** - 60-second cooldown between OTP requests
+- **Failed attempt tracking** - 3 attempts max before transaction lock
 
 ## Authentication
 
@@ -68,11 +72,11 @@ Authorization: Bearer <your_jwt_token>
 
 ### GET /student/{student_id}
 
-Get student information by student ID. Shows tuition amount if unpaid.
+Get complete student information including all semester tuition records.
 
 **URL Parameters:**
 
-- `student_id` (string): The student ID (e.g., "2021001234")
+- `student_id` (string): The student ID (e.g., "522i0001")
 
 **Headers:**
 
@@ -82,30 +86,46 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 
 **Response (Success - 200):**
 
-**For Unpaid Student:**
-
 ```json
 {
   "message": "Retrieve student information successfully",
   "student": {
-    "student_id": "2021001234",
+    "student_id": "522i0001",
     "full_name": "Tran Van B",
-    "tuition_amount": "20000000",
-    "is_paid": false
-  }
-}
-```
-
-**For Paid Student:**
-
-```json
-{
-  "message": "Retrieve student information successfully",
-  "student": {
-    "student_id": "2021001234",
-    "full_name": "Tran Van B",
-    "is_paid": true
-  }
+    "major": "Computer Science",
+    "enrollment_year": 2022
+  },
+  "tuition_summary": {
+    "total_semesters": 3,
+    "unpaid_semesters": 3,
+    "total_unpaid_amount": 60000000
+  },
+  "semesters": [
+    {
+      "id": 1,
+      "semester": "2024-1",
+      "academic_year": "2024-2025",
+      "tuition_amount": "20000000",
+      "is_paid": false,
+      "paid_at": null
+    },
+    {
+      "id": 2,
+      "semester": "2024-2",
+      "academic_year": "2024-2025",
+      "tuition_amount": "20000000",
+      "is_paid": false,
+      "paid_at": null
+    },
+    {
+      "id": 3,
+      "semester": "2025-1",
+      "academic_year": "2024-2025",
+      "tuition_amount": "20000000",
+      "is_paid": false,
+      "paid_at": null
+    }
+  ]
 }
 ```
 
@@ -202,17 +222,78 @@ Authorization: Bearer <your_jwt_token>
 
 ### Payment Flow
 
-1. **Initialize** → Creates transaction, generates OTP, locks resources
-2. **Send OTP** → Resend OTP (1-minute cooldown protection)
-3. **Complete** → Validate OTP, deduct balance, release locks
+1. **Get Semesters** → View available semesters for a student
+2. **Initialize** → Creates transaction for specific semester, generates OTP, locks resources
+3. **Send OTP** → Resend OTP if needed (60-second cooldown protection)
+4. **Complete** → Validate OTP, deduct balance, mark semester paid, release locks
 
-### POST /transactions/initialize
+### GET /transaction/semesters/{student_id}
 
-Initialize a new payment transaction for a student's tuition.
+Get all available semesters for a specific student with payment status.
 
+**URL Parameters:**
+
+- `student_id` (string): The student ID (e.g., "522i0001")
+
+**Query Parameters:**
+
+- `show_all` (boolean, optional): Show all semesters including paid ones. Default: false (only unpaid)
+
+**Headers:**
+
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "student": {
+    "student_id": "522i0001",
+    "full_name": "Tran Van B",
+    "major": "Computer Science"
+  },
+  "semesters": [
+    {
+      "id": 1,
+      "semester": "2024-1",
+      "academic_year": "2024-2025",
+      "tuition_amount": "20000000",
+      "is_paid": false,
+      "paid_at": null
+    },
+    {
+      "id": 2,
+      "semester": "2024-2",
+      "academic_year": "2024-2025",
+      "tuition_amount": "20000000",
+      "is_paid": false,
+      "paid_at": null
+    }
+  ],
+  "total_unpaid": 40000000
+}
+```
+
+**Response (Error - 404):**
+
+```json
+{
+  "error": "Student not found"
+}
+```
+
+### POST /transaction/initialize
+
+Initialize a new payment transaction for a specific semester's tuition.
+
+- Validates student and semester exist
+- Checks if semester is already paid
 - Generates real 6-digit OTP code (5-minute expiration)
 - Creates resource locks to prevent concurrent payments
-- Locks both user account and student tuition
+- Locks both user account and specific semester tuition
+- Sends OTP to user's registered email
 
 **Headers:**
 
@@ -225,7 +306,8 @@ Content-Type: application/json
 
 ```json
 {
-  "student_id": "2021001234"
+  "student_id": "522i0001",
+  "tuition_id": 1
 }
 ```
 
@@ -236,10 +318,27 @@ Content-Type: application/json
   "message": "Transaction created successfully. OTP sent to your email.",
   "transaction": {
     "id": 1,
-    "student_id": "2021001234",
+    "student_id": "522i0001",
+    "tuition_id": 1,
+    "semester": "2024-1",
+    "academic_year": "2024-2025",
     "amount": "20000000",
     "status": "otp_sent"
   }
+}
+```
+
+**Response (Error - 400):**
+
+```json
+{
+  "error": "Student ID and Tuition ID are required"
+}
+```
+
+```json
+{
+  "error": "This semester tuition is already paid"
 }
 ```
 
@@ -251,11 +350,9 @@ Content-Type: application/json
 }
 ```
 
-**Response (Error - 400):**
-
 ```json
 {
-  "error": "Student tuition already paid"
+  "error": "Tuition record not found for this student"
 }
 ```
 
@@ -269,17 +366,18 @@ Content-Type: application/json
 
 ```json
 {
-  "error": "This student's payment is already being processed by another user."
+  "error": "This semester tuition payment is already being processed by another user."
 }
 ```
 
-### POST /transactions/send_otp
+### POST /transaction/send_otp
 
 Resend OTP for a pending transaction.
 
-- **1-minute cooldown protection** - Users must wait 60 seconds between OTP requests
+- **60-second cooldown protection** - Users must wait 60 seconds between OTP requests
 - Invalidates previous OTP codes and generates new ones
 - Shows remaining cooldown time if requested too early
+- Resets OTP expiration timer to 5 minutes
 
 **Headers:**
 
@@ -304,6 +402,14 @@ Content-Type: application/json
 }
 ```
 
+**Response (Error - 400):**
+
+```json
+{
+  "error": "Transaction ID is required"
+}
+```
+
 **Response (Error - 404):**
 
 ```json
@@ -320,17 +426,18 @@ Content-Type: application/json
 }
 ```
 
-### POST /transactions/complete
+### POST /transaction/complete
 
 Complete a payment transaction using OTP verification.
 
 - **Validates real OTP codes** from database (not hardcoded)
+- **Tracks failed attempts** - Maximum 3 attempts before transaction lock
 - Checks OTP expiration (5-minute timeout)
 - Uses atomic database transactions for safety
-- Deducts user balance and marks student as paid
-- Creates transaction history record
-- Releases resource locks
-- **Sends payment confirmation email** with transaction details
+- Deducts user balance and marks specific semester as paid
+- Creates transaction history record for audit trail
+- Releases resource locks (user account and semester tuition)
+- **Sends payment confirmation email** with detailed receipt
 
 **Headers:**
 
@@ -355,7 +462,7 @@ Content-Type: application/json
   "message": "Transaction completed successfully!",
   "transaction": {
     "id": 1,
-    "student_id": "2021001234",
+    "student_id": "522i0001",
     "amount": "20000000",
     "status": "completed"
   },
@@ -367,7 +474,24 @@ Content-Type: application/json
 
 ```json
 {
-  "error": "Invalid or expired OTP code"
+  "error": "OTP code and transaction ID are required"
+}
+```
+
+```json
+{
+  "error": "Invalid OTP code",
+  "error_code": "INVALID_OTP",
+  "failed_attempts": 1,
+  "remaining_attempts": 2
+}
+```
+
+```json
+{
+  "error": "OTP has expired. Transaction has been cancelled.",
+  "error_code": "OTP_EXPIRED",
+  "transaction_status": "failed"
 }
 ```
 
@@ -382,6 +506,23 @@ Content-Type: application/json
 ```json
 {
   "error": "Transaction not found or not ready for completion"
+}
+```
+
+```json
+{
+  "error": "Payer not found"
+}
+```
+
+**Response (Error - 423 - Locked):**
+
+```json
+{
+  "error": "Transaction locked due to multiple failed OTP attempts. Please start a new payment.",
+  "error_code": "TOO_MANY_ATTEMPTS",
+  "failed_attempts": 3,
+  "transaction_status": "failed"
 }
 ```
 
@@ -405,9 +546,14 @@ Content-Type: application/json
 ### Email Notifications
 
 - **OTP Delivery**: 6-digit verification codes sent to user's email
+  - Includes payment details (student info, semester, amount)
+  - Security warnings (5-minute expiration, never share code)
+  - Professional HTML template design
 - **Payment Confirmation**: Detailed receipt sent after successful payment
-- **Professional Templates**: HTML emails with transaction summaries
-- **Security Information**: Payment details, account balance updates
+  - Transaction ID and timestamp
+  - Student and semester information
+  - Amount paid and new balance
+  - Complete payment summary
 - **Non-intrusive**: Email failures don't affect transaction processing
 
 ### Database Safety
@@ -453,22 +599,30 @@ curl -X GET http://localhost:4000/api/user/profile \
 #### 3. Get student information
 
 ```bash
-curl -X GET http://localhost:4000/api/student/2021001234 \
+curl -X GET http://localhost:4000/api/student/522i0001 \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
-#### 4. Initialize payment transaction
+#### 4. Get available semesters for payment
+
+```bash
+curl -X GET http://localhost:4000/api/transaction/semesters/522i0001 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+#### 5. Initialize payment transaction
 
 ```bash
 curl -X POST http://localhost:4000/api/transaction/initialize \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "student_id": "2021001234"
+    "student_id": "522i0001",
+    "tuition_id": 1
   }'
 ```
 
-#### 5. Resend OTP (if needed)
+#### 6. Resend OTP (if needed)
 
 ```bash
 curl -X POST http://localhost:4000/api/transaction/send_otp \
@@ -479,7 +633,7 @@ curl -X POST http://localhost:4000/api/transaction/send_otp \
   }'
 ```
 
-#### 6. Complete transaction with OTP
+#### 7. Complete transaction with OTP
 
 ```bash
 curl -X POST http://localhost:4000/api/transaction/complete \
@@ -491,12 +645,32 @@ curl -X POST http://localhost:4000/api/transaction/complete \
   }'
 ```
 
-#### 7. Get transaction history
+#### 8. Get transaction history
 
 ```bash
 curl -X GET http://localhost:4000/api/user/transactions \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
+
+---
+
+## Test Credentials
+
+### Users
+
+| Username      | Password | Balance       | Email                   |
+| ------------- | -------- | ------------- | ----------------------- |
+| cuongcfvipss5 | 123456   | 50,000,000 ₫  | cuongcfvipss5@gmail.com |
+| mqcuong1603   | 123456   | 50,000,000 ₫  | mqcuong1603@gmail.com   |
+| testuser      | 123456   | 100,000,000 ₫ | testuser@example.com    |
+
+### Students
+
+| Student ID | Name        | Major                | Unpaid Semesters |
+| ---------- | ----------- | -------------------- | ---------------- |
+| 522i0001   | Tran Van B  | Computer Science     | 3 (60M ₫)        |
+| 522i0002   | Le Thi C    | Information Tech     | 1 (15M ₫)        |
+| 522i0003   | Pham Minh D | Software Engineering | 2 (36M ₫)        |
 
 ### Testing Scenarios
 

@@ -1,255 +1,342 @@
 {
-	"info": {
-		"_postman_id": "b3aa1e16-6621-4a45-a79a-35277b5e1ab8",
-		"name": "SOA-midterm",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "40084207"
-	},
-	"item": [
-		{
-			"name": "/api/auth",
-			"item": [
-				{
-					"name": "Login",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\r\n    \"username\":\"mqcuong\",\r\n    \"password\":\"123456\"\r\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "http://localhost:4000/api/auth/login",
-							"protocol": "http",
-							"host": [
-								"localhost"
-							],
-							"port": "4000",
-							"path": [
-								"api",
-								"auth",
-								"login"
-							]
-						}
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "/api/sudent",
-			"item": [
-				{
-					"name": "Get student info",
-					"protocolProfileBehavior": {
-						"disableBodyPruning": true
-					},
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsInVzZXJuYW1lIjoibXFjdW9uZyIsImlhdCI6MTc1NzA1ODczNSwiZXhwIjoxNzU3MTQ1MTM1fQ.KeEnrN0IkWuTDBmyoxPN_0v_djsLrY5Q5j5sh2ds9Nc",
-									"type": "string"
-								}
-							]
-						},
-						"method": "GET",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": ""
-						},
-						"url": {
-							"raw": "http://localhost:4000/api/student/522i0001",
-							"protocol": "http",
-							"host": [
-								"localhost"
-							],
-							"port": "4000",
-							"path": [
-								"api",
-								"student",
-								"522i0001"
-							]
-						}
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "/api/transaction",
-			"item": [
-				{
-					"name": "initialize transaction",
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsInVzZXJuYW1lIjoibXFjdW9uZyIsImlhdCI6MTc1NzA2MDEwMiwiZXhwIjoxNzU3MTQ2NTAyfQ.59MMSZT5Xnp3KaIGp9hea63IygUGfW5LlvKf_lAWyh8",
-									"type": "string"
-								}
-							]
-						},
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\r\n    \"student_id\": \"522i0001\"\r\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "http://localhost:4000/api/transaction/initialize",
-							"protocol": "http",
-							"host": [
-								"localhost"
-							],
-							"port": "4000",
-							"path": [
-								"api",
-								"transaction",
-								"initialize"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "complete transaction",
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsInVzZXJuYW1lIjoibXFjdW9uZyIsImlhdCI6MTc1NzA2MDEwMiwiZXhwIjoxNzU3MTQ2NTAyfQ.59MMSZT5Xnp3KaIGp9hea63IygUGfW5LlvKf_lAWyh8",
-									"type": "string"
-								}
-							]
-						},
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\r\n    \"otp_code\": \"876580\",\r\n    \"transaction_id\": \"1\"\r\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "http://localhost:4000/api/transaction/complete",
-							"protocol": "http",
-							"host": [
-								"localhost"
-							],
-							"port": "4000",
-							"path": [
-								"api",
-								"transaction",
-								"complete"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "send-otp",
-					"request": {
-						"method": "POST",
-						"header": []
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "/api/user",
-			"item": [
-				{
-					"name": "User Profile",
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsInVzZXJuYW1lIjoibXFjdW9uZyIsImlhdCI6MTc1NzA1OTQ3NSwiZXhwIjoxNzU3MTQ1ODc1fQ.aRy3DqIFpA0AwkNidHh0lraYFbe2hOHUQkx8qGlw7O8",
-									"type": "string"
-								}
-							]
-						},
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "http://localhost:4000/api/user/profile",
-							"protocol": "http",
-							"host": [
-								"localhost"
-							],
-							"port": "4000",
-							"path": [
-								"api",
-								"user",
-								"profile"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "User's history transactions",
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsInVzZXJuYW1lIjoibXFjdW9uZyIsImlhdCI6MTc1NzA2MDEwMiwiZXhwIjoxNzU3MTQ2NTAyfQ.59MMSZT5Xnp3KaIGp9hea63IygUGfW5LlvKf_lAWyh8",
-									"type": "string"
-								}
-							]
-						},
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "http://localhost:4000/api/user/transactions",
-							"protocol": "http",
-							"host": [
-								"localhost"
-							],
-							"port": "4000",
-							"path": [
-								"api",
-								"user",
-								"transactions"
-							]
-						}
-					},
-					"response": []
-				}
-			]
-		}
-	],
-	"variable": [
-		{
-			"key": "baseURL",
-			"value": "http://localhost:3000",
-			"type": "default"
-		}
-	]
+  "info": {
+    "_postman_id": "b3aa1e16-6621-4a45-a79a-35277b5e1ab8",
+    "name": "iBanking Tuition Payment System",
+    "description": "Complete API collection for SOA Midterm iBanking System with multi-semester support, OTP verification, and resource locking",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "40084207"
+  },
+  "item": [
+    {
+      "name": "/api/auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Save token to collection variable for easy reuse",
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set(\"authToken\", jsonData.token);",
+                  "    pm.collectionVariables.set(\"userId\", jsonData.user.id);",
+                  "    pm.collectionVariables.set(\"username\", jsonData.user.username);",
+                  "    console.log(\"Token saved:\", jsonData.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"username\": \"cuongcfvipss5\",\r\n    \"password\": \"123456\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseURL}}/auth/login",
+              "host": ["{{baseURL}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login with username and password. Test credentials:\n- cuongcfvipss5 / 123456\n- mqcuong1603 / 123456\n- testuser / 123456"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "/api/student",
+      "item": [
+        {
+          "name": "Get Student Info",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseURL}}/student/{{studentId}}",
+              "host": ["{{baseURL}}"],
+              "path": ["student", "{{studentId}}"]
+            },
+            "description": "Get complete student information including all semester tuition records.\n\nTest Student IDs:\n- 522i0001 (Tran Van B - 3 semesters)\n- 522i0002 (Le Thi C - 2 semesters)\n- 522i0003 (Pham Minh D - 2 semesters)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "/api/transaction",
+      "item": [
+        {
+          "name": "Get Available Semesters",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseURL}}/transaction/semesters/{{studentId}}?show_all=false",
+              "host": ["{{baseURL}}"],
+              "path": ["transaction", "semesters", "{{studentId}}"],
+              "query": [
+                {
+                  "key": "show_all",
+                  "value": "false",
+                  "description": "Set to 'true' to show all semesters including paid ones"
+                }
+              ]
+            },
+            "description": "Get all available semesters for a student with payment status. By default shows only unpaid semesters.\n\nQuery parameter:\n- show_all=true : Include paid semesters\n- show_all=false : Only unpaid (default)"
+          },
+          "response": []
+        },
+        {
+          "name": "Initialize Transaction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Save transaction ID for later use",
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set(\"transactionId\", jsonData.transaction.id);",
+                  "    console.log(\"Transaction ID saved:\", jsonData.transaction.id);",
+                  "    console.log(\"Check your email for OTP code!\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"student_id\": \"{{studentId}}\",\r\n    \"tuition_id\": 1\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseURL}}/transaction/initialize",
+              "host": ["{{baseURL}}"],
+              "path": ["transaction", "initialize"]
+            },
+            "description": "Initialize payment for a specific semester. Generates OTP and sends to user's email.\n\nRequired:\n- student_id: The student ID (e.g., \"522i0001\")\n- tuition_id: The semester tuition record ID (get from \"Get Available Semesters\" endpoint)\n\nThis will:\n1. Create transaction and locks\n2. Generate 6-digit OTP (5-minute expiration)\n3. Send OTP to your registered email\n4. Return transaction details"
+          },
+          "response": []
+        },
+        {
+          "name": "Resend OTP",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"transaction_id\": {{transactionId}}\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseURL}}/transaction/send_otp",
+              "host": ["{{baseURL}}"],
+              "path": ["transaction", "send_otp"]
+            },
+            "description": "Resend OTP for pending transaction.\n\nNote: \n- 60-second cooldown between requests\n- Invalidates previous OTP codes\n- Generates new 6-digit OTP with 5-minute expiration"
+          },
+          "response": []
+        },
+        {
+          "name": "Complete Transaction",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"transaction_id\": {{transactionId}},\r\n    \"otp_code\": \"123456\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseURL}}/transaction/complete",
+              "host": ["{{baseURL}}"],
+              "path": ["transaction", "complete"]
+            },
+            "description": "Complete payment with OTP verification.\n\nRequired:\n- transaction_id: From initialize response\n- otp_code: 6-digit code from email\n\nSecurity:\n- Maximum 3 failed attempts\n- OTP expires after 5 minutes\n- Atomic database transaction\n- Sends confirmation email on success"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "/api/user",
+      "item": [
+        {
+          "name": "Get User Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseURL}}/user/profile",
+              "host": ["{{baseURL}}"],
+              "path": ["user", "profile"]
+            },
+            "description": "Get current user's profile information including balance.\n\nReturns:\n- User ID\n- Username\n- Full name\n- Email\n- Phone\n- Current balance"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Transaction History",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseURL}}/user/transactions",
+              "host": ["{{baseURL}}"],
+              "path": ["user", "transactions"]
+            },
+            "description": "Get user's transaction history with balance changes.\n\nReturns audit trail of all completed transactions:\n- Transaction ID\n- Balance before\n- Balance after\n- Timestamp"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseURL",
+      "value": "http://localhost:4000/api",
+      "type": "default"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "studentId",
+      "value": "522i0001",
+      "type": "default"
+    },
+    {
+      "key": "transactionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "username",
+      "value": "",
+      "type": "string"
+    }
+  ]
 }
