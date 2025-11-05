@@ -45,9 +45,22 @@ otpInputs.forEach((input, index) => {
             e.preventDefault();
         }
     });
+
+    // Handle paste
+    input.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const pastedData = e.clipboardData.getData('text').replace(/\D/g, '');
+        if (pastedData.length === 6) {
+            for (let i = 0; i < 6; i++) {
+                otpInputs[i].value = pastedData[i];
+            }
+            otpInputs[5].focus();
+        }
+    });
 });
 
 let transactionId = null;
+let paymentCompleted = false;
 
 // Initialize payment
 async function initializePayment() {
@@ -135,6 +148,9 @@ otpForm.addEventListener('submit', async (e) => {
         user.balance = data.new_balance;
         localStorage.setItem('user', JSON.stringify(user));
 
+        // Mark payment as completed
+        paymentCompleted = true;
+
     } catch (error) {
         otpError.textContent = error.message;
         otpError.classList.remove('d-none');
@@ -175,6 +191,30 @@ resendBtn.addEventListener('click', async () => {
     } finally {
         resendBtn.disabled = false;
         resendBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Resend OTP';
+    }
+});
+
+// Cancel transaction if user leaves page without completing
+window.addEventListener('beforeunload', async (e) => {
+    if (transactionId && !paymentCompleted) {
+        // Show confirmation dialog
+        e.preventDefault();
+        e.returnValue = 'You have a pending payment. Are you sure you want to leave?';
+
+        // Try to cancel the transaction
+        try {
+            await fetch(API_ENDPOINTS.TRANSACTION_CANCEL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({ transaction_id: transactionId }),
+                keepalive: true // Important: allows request to complete even if page is closing
+            });
+        } catch (error) {
+            console.error('Failed to cancel transaction:', error);
+        }
     }
 });
 

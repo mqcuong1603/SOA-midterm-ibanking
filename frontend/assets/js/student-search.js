@@ -57,7 +57,7 @@ searchForm.addEventListener('submit', async (e) => {
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <h6 class="mb-1">
-                                ${semester.semester} - ${semester.academic_year}
+                                ${formatSemester(semester.semester, semester.academic_year)}
                                 ${isPaid ? '<span class="badge bg-success ms-2">Paid</span>' : ''}
                             </h6>
                             <p class="mb-0 text-success fw-bold">${formatCurrency(semester.tuition_amount)}</p>
