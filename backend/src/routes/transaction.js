@@ -197,6 +197,175 @@ router.post("/initialize", async (req, res) => {
   }
 });
 
+// Get user's pending/incomplete transactions
+router.get("/pending", async (req, res) => {
+  try {
+    const payer_id = req.user.userId;
+
+    // Find all pending or otp_sent transactions for the user
+    const pendingTransactions = await Transaction.findAll({
+      where: {
+        payer_id,
+        status: ["pending", "otp_sent"],
+      },
+      order: [["createdAt", "DESC"]],
+    });
+
+    // Enrich with student and tuition information
+    const enrichedTransactions = await Promise.all(
+      pendingTransactions.map(async (transaction) => {
+        const student = await Student.findOne({
+          where: { student_id: transaction.student_id },
+        });
+        const tuition = await StudentTuition.findByPk(transaction.tuition_id);
+
+        // Check if transaction has expired (created more than 1 hour ago)
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const isExpired = transaction.createdAt < oneHourAgo;
+
+        return {
+          id: transaction.id,
+          student_id: transaction.student_id,
+          student_name: student ? student.full_name : "Unknown",
+          semester: tuition ? tuition.semester : null,
+          academic_year: tuition ? tuition.academic_year : null,
+          amount: transaction.amount,
+          status: transaction.status,
+          created_at: transaction.createdAt,
+          is_expired: isExpired,
+          failed_otp_attempts: transaction.failed_otp_attempts,
+        };
+      })
+    );
+
+    res.json({
+      pending_transactions: enrichedTransactions,
+      count: enrichedTransactions.length,
+    });
+  } catch (error) {
+    console.error("Get pending transactions error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all transaction history (completed, failed, pending)
+router.get("/history", async (req, res) => {
+  try {
+    const payer_id = req.user.userId;
+    const { status } = req.query; // Optional filter by status
+
+    const whereClause = { payer_id };
+    if (status && ["pending", "otp_sent", "completed", "failed"].includes(status)) {
+      whereClause.status = status;
+    }
+
+    const transactions = await Transaction.findAll({
+      where: whereClause,
+      order: [["createdAt", "DESC"]],
+    });
+
+    // Enrich with student and tuition information
+    const enrichedTransactions = await Promise.all(
+      transactions.map(async (transaction) => {
+        const student = await Student.findOne({
+          where: { student_id: transaction.student_id },
+        });
+        const tuition = await StudentTuition.findByPk(transaction.tuition_id);
+
+        return {
+          id: transaction.id,
+          student_id: transaction.student_id,
+          student_name: student ? student.full_name : "Unknown",
+          semester: tuition ? tuition.semester : null,
+          academic_year: tuition ? tuition.academic_year : null,
+          amount: transaction.amount,
+          status: transaction.status,
+          created_at: transaction.createdAt,
+          completed_at: transaction.completed_at,
+          failed_otp_attempts: transaction.failed_otp_attempts,
+        };
+      })
+    );
+
+    res.json({
+      transactions: enrichedTransactions,
+      count: enrichedTransactions.length,
+    });
+  } catch (error) {
+    console.error("Get transaction history error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Cancel a pending transaction
+router.post("/cancel", async (req, res) => {
+  const dbTransaction = await sequelize.transaction();
+  try {
+    const { transaction_id } = req.body;
+    const payer_id = req.user.userId;
+
+    if (!transaction_id)
+      return res.status(400).json({ error: "Transaction ID is required" });
+
+    const transaction = await Transaction.findOne({
+      where: {
+        id: transaction_id,
+        payer_id,
+        status: ["pending", "otp_sent"],
+      },
+    });
+
+    if (!transaction)
+      return res.status(404).json({
+        error: "Transaction not found or already completed/cancelled",
+      });
+
+    // Mark transaction as failed
+    await transaction.update(
+      {
+        status: "failed",
+        completed_at: new Date(),
+      },
+      { transaction: dbTransaction }
+    );
+
+    // Release resource locks
+    await TransactionLock.destroy({
+      where: {
+        [Op.or]: [
+          { resource_type: "user_account", resource_id: payer_id.toString() },
+          {
+            resource_type: "semester_tuition",
+            resource_id: transaction.tuition_id.toString(),
+          },
+        ],
+      },
+      transaction: dbTransaction,
+    });
+
+    // Mark unused OTPs as used
+    await OtpCode.update(
+      { is_used: true },
+      {
+        where: { transaction_id, is_used: false },
+        transaction: dbTransaction,
+      }
+    );
+
+    await dbTransaction.commit();
+
+    res.json({
+      message: "Transaction cancelled successfully",
+      transaction_id: transaction.id,
+      status: "failed",
+    });
+  } catch (error) {
+    await dbTransaction.rollback();
+    console.error("Cancel transaction error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Resend OTP
 router.post("/send_otp", async (req, res) => {
   try {
@@ -391,8 +560,37 @@ router.post("/complete", async (req, res) => {
       return res.status(404).json({ error: "Payer not found" });
     }
     if (parseFloat(payer.balance) < parseFloat(transaction.amount)) {
-      await dbTransaction.rollback();
-      return res.status(400).json({ error: "Insufficient balance" });
+      // Mark transaction as failed due to insufficient balance
+      await transaction.update(
+        {
+          status: "failed",
+          completed_at: new Date(),
+        },
+        { transaction: dbTransaction }
+      );
+
+      // Release resource locks
+      await TransactionLock.destroy({
+        where: {
+          [Op.or]: [
+            { resource_type: "user_account", resource_id: payer_id.toString() },
+            {
+              resource_type: "semester_tuition",
+              resource_id: transaction.tuition_id.toString(),
+            },
+          ],
+        },
+        transaction: dbTransaction,
+      });
+
+      await dbTransaction.commit();
+      return res.status(400).json({
+        error: "Insufficient balance. Transaction has been cancelled.",
+        error_code: "INSUFFICIENT_BALANCE",
+        transaction_status: "failed",
+        current_balance: payer.balance,
+        required_amount: transaction.amount,
+      });
     }
 
     const newBalance =

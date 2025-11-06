@@ -42,6 +42,11 @@
               </a>
             </li>
             <li class="nav-item">
+              <a class="nav-link" href="transactions.html">
+                <i class="bi bi-clock-history"></i> Transactions
+              </a>
+            </li>
+            <li class="nav-item">
               <a class="nav-link" href="#" id="logoutBtn">
                 <i class="bi bi-box-arrow-right"></i> Logout
               </a>
@@ -117,6 +122,33 @@
                 <p class="mt-2">No recent transactions</p>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pending Transactions Modal -->
+    <div class="modal fade" id="pendingTransactionsModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header bg-warning">
+            <h5 class="modal-title">
+              <i class="bi bi-exclamation-triangle-fill"></i> Pending Transactions Found
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <p>You have <strong id="pendingTransactionCount">0</strong> pending transaction(s) that need your attention.</p>
+            <div id="pendingTransactionsList" class="mb-3"></div>
+            <p class="text-muted mb-0">
+              <small>Would you like to complete or cancel these transactions?</small>
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Later</button>
+            <a href="transactions.html" class="btn btn-warning">
+              <i class="bi bi-eye"></i> View Transactions
+            </a>
           </div>
         </div>
       </div>

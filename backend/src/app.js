@@ -16,6 +16,7 @@ import Transaction from "./models/Transaction.js";
 import TransactionHistory from "./models/TransactionHistory.js";
 import OtpCode from "./models/OtpCode.js";
 import TransactionLock from "./models/TransactionLock.js";
+import { startCleanupScheduler } from "./services/cleanupService.js";
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -52,5 +53,8 @@ app.use("/api/user", userRoute);
 
 // Initialize database with test data
 initializeDatabase();
+
+// Start cleanup scheduler for expired transactions and locks
+startCleanupScheduler();
 
 export default app;
