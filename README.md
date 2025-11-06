@@ -1,103 +1,126 @@
-# 🏦 Banking/iBanking Tuition Payment System
+# iBanking Tuition Payment System
 
-A secure banking API system for tuition payments with JWT authentication, OTP verification, and transaction management.
+A banking system for paying student tuition with OTP verification and multi-semester support.
 
-## ✨ Features
+## Requirements
 
-- 🔐 JWT-based authentication
-- 📧 Real OTP verification (6-digit codes, 5-minute expiration)
-- 🔒 Resource locking to prevent concurrent payments
-- 📊 Transaction history tracking
-- ⚡ Atomic balance operations
-- 🛡️ Security: Rate limiting, failed attempt tracking
+- Node.js (v14 or higher)
+- MySQL (or Docker)
 
-## 🚀 Quick Start
+## Setup & Run
 
-### Prerequisites
-
-- Node.js
-- **Choose one:**
-  - MySQL - Local installation
-  - Docker & Docker Compose - For containerized MySQL
-
-### Installation
-
-1. **Clone and Install**
-
-   ```bash
-   git clone <repository-url>
-   cd midterm3/backend
-   npm install
-   ```
-
-2. **Database Setup - Choose Option A or B**
-
-   #### Option A: Local MySQL
-
-   ```bash
-   mysql -u root -p
-   CREATE DATABASE banking_app;
-   exit
-   ```
-
-   #### Option B: Docker MySQL (Recommended)
-
-   ```bash
-   docker-compose up -d
-   ```
-
-3. **Run Application**
-
-   ```bash
-   # Development mode
-   npm run dev
-
-   # Production mode
-   npm start
-   ```
-
-4. **Access API**
-   - Server: <http://localhost:4000>
-   - API Docs: See [API_DOCS.md](API_DOCS.md)
-
-### API Testing Tools
-
-- **Postman**: Import collection from [API_DOCS.md](API_DOCS.md)
-- **Database**: Use MySQL Workbench or Adminer
-
-## 📚 API Endpoints
-
-| Method | Endpoint                      | Description             |
-| ------ | ----------------------------- | ----------------------- |
-| `POST` | `/api/auth/login`             | User authentication     |
-| `GET`  | `/api/user/profile`           | Get user profile        |
-| `GET`  | `/api/user/transactions`      | Get transaction history |
-| `GET`  | `/api/student/{id}`           | Get student info        |
-| `POST` | `/api/transaction/initialize` | Start payment           |
-| `POST` | `/api/transaction/send_otp`   | Resend OTP              |
-| `POST` | `/api/transaction/complete`   | Complete payment        |
-
-## 📖 Documentation
-
-- [Complete API Documentation](API_DOCS.md)
-- [Database Schema](backend/src/config/database_schema.sql)
-
-## 🛠️ Development
+### 1. Install Dependencies
 
 ```bash
-# Install dependencies
+cd backend
 npm install
-
-# Run in development mode
-npm run dev
-
-# View logs
-npm run logs
-
-# Database reset (development only)
-# Set force: true in app.js temporarily
 ```
 
-## 📝 License
+### 2. Configure Environment
 
-This project is for educational purposes (SOA Course - TDTU).
+Create `.env` file in `backend` folder:
+
+```env
+# Database
+DB_NAME=banking_app
+DB_USER=root
+DB_PASS=your_password
+DB_HOST=localhost
+
+# JWT
+JWT_SECRET=your_secret_key_here
+
+# Email (for OTP)
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=your_email@gmail.com
+EMAIL_PASSWORD=your_app_password
+```
+
+### 3. Start Database
+
+**Option A: Docker (Recommended)**
+
+```bash
+# From project root
+docker-compose up -d
+```
+
+**Option B: Local MySQL**
+
+```bash
+mysql -u root -p
+CREATE DATABASE banking_app;
+exit
+```
+
+### 4. Run Application
+
+```bash
+cd backend
+npm run dev
+```
+
+Server starts at: `http://localhost:4000`
+
+The database tables and test data will be created automatically on first run.
+
+## Test the Application
+
+### Option 1: Use Postman
+
+1. Import `SOA-midterm.postman_collection.json`
+2. Run "Login" request first (token auto-saves)
+3. Test other endpoints
+
+### Option 2: Use Frontend
+
+Open `frontend/index.html` in browser or use Live Server.
+
+## Test Credentials
+
+**Users:**
+
+- Username: `cuongcfvipss5` / Password: `123456` (Balance: 50M VND)
+- Username: `mqcuong1603` / Password: `123456` (Balance: 50M VND)
+
+**Students:**
+
+- `522i0001` - Tran Van B (3 unpaid semesters)
+- `522i0002` - Le Thi C (1 unpaid semester)
+- `522i0003` - Pham Minh D (2 unpaid semesters)
+
+## API Endpoints
+
+| Method | Endpoint                          | Description         |
+| ------ | --------------------------------- | ------------------- |
+| POST   | `/api/auth/login`                 | Login               |
+| GET    | `/api/user/profile`               | Get user profile    |
+| GET    | `/api/user/transactions`          | Transaction history |
+| GET    | `/api/student/{id}`               | Student info        |
+| GET    | `/api/transaction/semesters/{id}` | Available semesters |
+| POST   | `/api/transaction/initialize`     | Start payment       |
+| POST   | `/api/transaction/send_otp`       | Resend OTP          |
+| POST   | `/api/transaction/complete`       | Complete payment    |
+
+## Documentation
+
+- Full API docs: [API_DOCS.md](API_DOCS.md)
+- Use case diagram: [USE_CASE_DIAGRAM.txt](USE_CASE_DIAGRAM.txt)
+
+## Troubleshooting
+
+**Database connection error:**
+
+- Check MySQL is running
+- Verify `.env` credentials
+
+**Email not sending:**
+
+- Use Gmail App Password (not regular password)
+- Check EMAIL\_\* settings in `.env`
+
+**Port 4000 already in use:**
+
+- Change `PORT=4000` in `.env`
+- Update frontend `config.js` accordingly
