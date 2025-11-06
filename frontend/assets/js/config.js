@@ -11,6 +11,8 @@ const API_ENDPOINTS = {
     TRANSACTION_COMPLETE: `${API_BASE_URL}/transaction/complete`,
     TRANSACTION_CANCEL: `${API_BASE_URL}/transaction/cancel`,
     RESEND_OTP: `${API_BASE_URL}/transaction/send_otp`,
+    PENDING_TRANSACTIONS: `${API_BASE_URL}/transaction/pending`,
+    TRANSACTION_HISTORY: `${API_BASE_URL}/transaction/history`,
 };
 
 // Helper function to format currency
