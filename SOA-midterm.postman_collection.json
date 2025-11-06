@@ -234,6 +234,94 @@
             "description": "Complete payment with OTP verification.\n\nRequired:\n- transaction_id: From initialize response\n- otp_code: 6-digit code from email\n\nSecurity:\n- Maximum 3 failed attempts\n- OTP expires after 5 minutes\n- Atomic database transaction\n- Sends confirmation email on success"
           },
           "response": []
+        },
+        {
+          "name": "Get Pending Transactions",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseURL}}/transaction/pending",
+              "host": ["{{baseURL}}"],
+              "path": ["transaction", "pending"]
+            },
+            "description": "Get all pending/incomplete transactions for the current user.\n\nReturns:\n- Transactions in 'pending' or 'otp_sent' status\n- Student and semester information\n- Expiration status (>1 hour old)\n- Failed OTP attempt counts\n\nUse this to:\n- Check for incomplete payments on login\n- Resume abandoned transactions\n- Clean up old pending transactions"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Transaction History",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseURL}}/transaction/history?status=",
+              "host": ["{{baseURL}}"],
+              "path": ["transaction", "history"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Filter by status: pending, otp_sent, completed, failed (optional)"
+                }
+              ]
+            },
+            "description": "Get complete transaction history with all statuses.\n\nQuery parameters:\n- status (optional): Filter by 'pending', 'otp_sent', 'completed', or 'failed'\n\nReturns:\n- All transactions with full details\n- Student and semester information\n- Creation and completion timestamps\n- Failed OTP attempt counts\n\nNote: Different from /user/transactions which only shows balance history"
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Transaction",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"transaction_id\": {{transactionId}}\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseURL}}/transaction/cancel",
+              "host": ["{{baseURL}}"],
+              "path": ["transaction", "cancel"]
+            },
+            "description": "Cancel a pending or otp_sent transaction.\n\nRequired:\n- transaction_id: The transaction to cancel\n\nActions:\n- Marks transaction as 'failed'\n- Releases resource locks\n- Invalidates unused OTP codes\n- Allows immediate retry of payment\n\nRestrictions:\n- Only works for 'pending' or 'otp_sent' status\n- Cannot cancel completed or already failed transactions"
+          },
+          "response": []
         }
       ]
     },

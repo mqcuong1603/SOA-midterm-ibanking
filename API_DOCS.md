@@ -14,11 +14,13 @@ This API provides a complete banking system for student tuition payments with en
 - **Real OTP verification system** - 6-digit codes with 5-minute expiration
 - **Multi-semester support** - Pay specific semesters for any student
 - **Resource locking** - Prevents concurrent payment conflicts
-- **Transaction history tracking** - Complete audit trail
+- **Transaction history tracking** - Complete audit trail with all statuses
+- **Incomplete transaction handling** - Recovery and cleanup for abandoned payments
 - **Email notifications** - OTP delivery and payment confirmations
 - **Atomic operations** - Database transactions ensure data consistency
 - **Rate limiting** - 60-second cooldown between OTP requests
 - **Failed attempt tracking** - 3 attempts max before transaction lock
+- **Automatic cleanup** - Scheduled jobs clean up expired transactions every 30 minutes
 
 ## Authentication
 
@@ -222,10 +224,17 @@ Authorization: Bearer <your_jwt_token>
 
 ### Payment Flow
 
+#### Standard Payment Flow:
 1. **Get Semesters** → View available semesters for a student
 2. **Initialize** → Creates transaction for specific semester, generates OTP, locks resources
 3. **Send OTP** → Resend OTP if needed (60-second cooldown protection)
 4. **Complete** → Validate OTP, deduct balance, mark semester paid, release locks
+
+#### Incomplete Transaction Flow:
+1. **Get Pending** → Check for any incomplete transactions
+2. **Resume** → Continue with pending transaction OR
+3. **Cancel** → Cancel pending transaction to start fresh
+4. **Get History** → View all transaction statuses (pending, completed, failed)
 
 ### GET /transaction/semesters/{student_id}
 
@@ -497,7 +506,11 @@ Content-Type: application/json
 
 ```json
 {
-  "error": "Insufficient balance"
+  "error": "Insufficient balance. Transaction has been cancelled.",
+  "error_code": "INSUFFICIENT_BALANCE",
+  "transaction_status": "failed",
+  "current_balance": "5000000",
+  "required_amount": "20000000"
 }
 ```
 
@@ -523,6 +536,153 @@ Content-Type: application/json
   "error_code": "TOO_MANY_ATTEMPTS",
   "failed_attempts": 3,
   "transaction_status": "failed"
+}
+```
+
+### GET /transaction/pending
+
+Get all pending/incomplete transactions for the current user.
+
+- Returns transactions in `pending` or `otp_sent` status
+- Includes student and semester information
+- Shows expiration status (>1 hour old)
+- Displays failed OTP attempt counts
+- Use to check for incomplete payments on login
+- Useful for resuming abandoned transactions
+
+**Headers:**
+
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "pending_transactions": [
+    {
+      "id": 123,
+      "student_id": "522i0001",
+      "student_name": "Tran Van B",
+      "semester": "2024-1",
+      "academic_year": "2024-2025",
+      "amount": "20000000",
+      "status": "otp_sent",
+      "created_at": "2025-01-01T10:30:00.000Z",
+      "is_expired": false,
+      "failed_otp_attempts": 0
+    }
+  ],
+  "count": 1
+}
+```
+
+### GET /transaction/history
+
+Get complete transaction history with all statuses (pending, completed, failed).
+
+**Query Parameters:**
+
+- `status` (optional): Filter by status - `pending`, `otp_sent`, `completed`, or `failed`
+
+**Headers:**
+
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "transactions": [
+    {
+      "id": 123,
+      "student_id": "522i0001",
+      "student_name": "Tran Van B",
+      "semester": "2024-1",
+      "academic_year": "2024-2025",
+      "amount": "20000000",
+      "status": "completed",
+      "created_at": "2025-01-01T10:30:00.000Z",
+      "completed_at": "2025-01-01T10:35:00.000Z",
+      "failed_otp_attempts": 0
+    },
+    {
+      "id": 124,
+      "student_id": "522i0002",
+      "student_name": "Le Thi C",
+      "semester": "2024-2",
+      "academic_year": "2024-2025",
+      "amount": "15000000",
+      "status": "failed",
+      "created_at": "2025-01-01T11:00:00.000Z",
+      "completed_at": "2025-01-01T11:05:00.000Z",
+      "failed_otp_attempts": 3
+    }
+  ],
+  "count": 2
+}
+```
+
+**Example with Filter:**
+
+```bash
+GET /transaction/history?status=completed
+GET /transaction/history?status=failed
+GET /transaction/history?status=pending
+```
+
+### POST /transaction/cancel
+
+Cancel a pending or otp_sent transaction.
+
+- Marks transaction as `failed`
+- Releases resource locks immediately
+- Invalidates unused OTP codes
+- Allows user to start a new payment right away
+- Only works for `pending` or `otp_sent` status
+- Cannot cancel completed or already failed transactions
+
+**Headers:**
+
+```
+Authorization: Bearer <your_jwt_token>
+Content-Type: application/json
+```
+
+**Request Body:**
+
+```json
+{
+  "transaction_id": 123
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "message": "Transaction cancelled successfully",
+  "transaction_id": 123,
+  "status": "failed"
+}
+```
+
+**Response (Error - 400):**
+
+```json
+{
+  "error": "Transaction ID is required"
+}
+```
+
+**Response (Error - 404):**
+
+```json
+{
+  "error": "Transaction not found or already completed/cancelled"
 }
 ```
 
@@ -562,6 +722,19 @@ Content-Type: application/json
 - **Rollback on Failure**: Ensures data consistency
 - **Foreign Key Constraints**: Maintains referential integrity
 - **Balance Validation**: Prevents overdrafts
+
+### Automatic Cleanup Service
+
+- **Scheduled Cleanup**: Runs every 30 minutes automatically on server startup
+- **Expired Transaction Cleanup**:
+  - Finds transactions >1 hour old in `pending` or `otp_sent` status
+  - Marks them as `failed`
+  - Releases all resource locks
+  - Invalidates unused OTP codes
+- **Lock Cleanup**: Removes expired locks from database
+- **OTP Cleanup**: Deletes OTP codes older than 24 hours
+- **Console Logging**: All cleanup operations logged with counts
+- **Non-blocking**: Runs in background without affecting API performance
 
 ## Error Codes Summary
 
@@ -652,6 +825,39 @@ curl -X GET http://localhost:4000/api/user/transactions \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
+#### 9. Get pending transactions
+
+```bash
+curl -X GET http://localhost:4000/api/transaction/pending \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+#### 10. Get complete transaction history (all statuses)
+
+```bash
+# Get all transactions
+curl -X GET http://localhost:4000/api/transaction/history \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+# Filter by status
+curl -X GET "http://localhost:4000/api/transaction/history?status=completed" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+curl -X GET "http://localhost:4000/api/transaction/history?status=failed" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+#### 11. Cancel a pending transaction
+
+```bash
+curl -X POST http://localhost:4000/api/transaction/cancel \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "transaction_id": 1
+  }'
+```
+
 ---
 
 ## Test Credentials
@@ -721,6 +927,29 @@ curl -X GET http://localhost:4000/api/user/transactions \
 3. Should succeed
 4. Request OTP resend again within 60 seconds
 5. Should get rate limit error with countdown
+
+#### Scenario G: Incomplete Transaction Handling
+
+1. Initialize transaction
+2. Leave it incomplete (don't enter OTP)
+3. Check pending transactions: `GET /api/transaction/pending`
+4. Should see transaction with `is_expired: false`
+5. Cancel transaction: `POST /api/transaction/cancel`
+6. Check transaction history: `GET /api/transaction/history?status=failed`
+7. Should see cancelled transaction with status "failed"
+
+#### Scenario H: Automatic Cleanup Testing
+
+1. Create several pending transactions
+2. Update database to make them old:
+   ```sql
+   UPDATE transactions
+   SET createdAt = DATE_SUB(NOW(), INTERVAL 2 HOUR)
+   WHERE status IN ('pending', 'otp_sent');
+   ```
+3. Wait for cleanup (or restart server)
+4. Check backend console for cleanup logs
+5. Check transaction history - should show as "failed"
 
 ### Error Response Examples
 
