@@ -231,13 +231,42 @@ async function resumeTransaction(txId) {
     document.getElementById("semesterInfo").textContent = `${transaction.semester} - ${transaction.academic_year}`;
     document.getElementById("amountInfo").textContent = formatCurrency(transaction.amount);
 
-    // Resend OTP to ensure user has a fresh code
-    await apiCall(API_ENDPOINTS.RESEND_OTP, {
-      method: "POST",
-      body: JSON.stringify({
-        transaction_id: transactionId,
-      }),
-    });
+    // Try to resend OTP, but don't fail if rate limited
+    try {
+      await apiCall(API_ENDPOINTS.RESEND_OTP, {
+        method: "POST",
+        body: JSON.stringify({
+          transaction_id: transactionId,
+        }),
+      });
+
+      // OTP resent successfully
+      console.log("New OTP sent to your email");
+    } catch (otpError) {
+      // If rate limited, that's okay - user can use existing OTP or wait
+      if (otpError.message.includes("wait")) {
+        console.log("Using existing OTP (rate limit active)");
+        // Show a helpful message
+        const infoMsg = document.createElement("div");
+        infoMsg.className = "alert alert-info alert-dismissible fade show";
+        infoMsg.innerHTML = `
+          <i class="bi bi-info-circle"></i> Using your existing OTP code. Check your email for the code sent earlier.
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.getElementById("otpCard").querySelector(".card-body").insertBefore(
+          infoMsg,
+          document.getElementById("otpCard").querySelector("form")
+        );
+
+        // Auto dismiss after 5 seconds
+        setTimeout(() => {
+          infoMsg.remove();
+        }, 5000);
+      } else {
+        // Some other error, but still allow user to try with existing OTP
+        console.error("Failed to resend OTP:", otpError.message);
+      }
+    }
 
     // Show OTP card
     loadingCard.classList.add("d-none");
