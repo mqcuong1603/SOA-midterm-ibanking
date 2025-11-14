@@ -207,41 +207,61 @@ router.post("/initialize", async (req, res) => {
       { transaction: dbTransaction }
     );
 
-    // Send OTP
-    const otpCode = await createOTP(transaction.id);
-    const user = await User.findByPk(payer_id);
-    const emailData = {
-      student_id: student.student_id,
-      full_name: student.full_name,
-      semester: tuition.semester,
-      academic_year: tuition.academic_year,
-      tuition_amount: tuition.tuition_amount,
-    };
-    await sendOTPEmail(user.email, otpCode, emailData);
-    console.log(`Generated OTP ${otpCode} for transaction ${transaction.id}`);
-
-    await transaction.update(
-      { status: "otp_sent" },
-      { transaction: dbTransaction }
-    );
-
-    // Commit all changes atomically
+    // Commit the database transaction BEFORE sending email (email is slow I/O)
     await dbTransaction.commit();
 
-    res.json({
-      message: "Transaction created successfully. OTP sent to your email.",
-      transaction: {
-        id: transaction.id,
-        student_id: transaction.student_id,
-        tuition_id: transaction.tuition_id,
+    // Now send OTP via email (outside of database transaction to avoid blocking)
+    try {
+      const otpCode = await createOTP(transaction.id);
+      const user = await User.findByPk(payer_id);
+      const emailData = {
+        student_id: student.student_id,
+        full_name: student.full_name,
         semester: tuition.semester,
         academic_year: tuition.academic_year,
-        amount: transaction.amount,
-        status: "otp_sent",
-      },
-    });
+        tuition_amount: tuition.tuition_amount,
+      };
+      await sendOTPEmail(user.email, otpCode, emailData);
+      console.log(`Generated OTP ${otpCode} for transaction ${transaction.id}`);
+
+      // Update status to otp_sent
+      await transaction.update({ status: "otp_sent" });
+
+      res.json({
+        message: "Transaction created successfully. OTP sent to your email.",
+        transaction: {
+          id: transaction.id,
+          student_id: transaction.student_id,
+          tuition_id: transaction.tuition_id,
+          semester: tuition.semester,
+          academic_year: tuition.academic_year,
+          amount: transaction.amount,
+          status: "otp_sent",
+        },
+      });
+    } catch (emailError) {
+      // Email failed but transaction and locks are already created
+      // Log error but still return success with pending status
+      console.error("Failed to send OTP email:", emailError);
+      res.json({
+        message: "Transaction created. Please use resend OTP if you don't receive the email.",
+        transaction: {
+          id: transaction.id,
+          student_id: transaction.student_id,
+          tuition_id: transaction.tuition_id,
+          semester: tuition.semester,
+          academic_year: tuition.academic_year,
+          amount: transaction.amount,
+          status: "pending",
+        },
+        warning: "OTP email could not be sent. Please use resend OTP button.",
+      });
+    }
   } catch (error) {
-    await dbTransaction.rollback();
+    // Only rollback if we haven't committed yet
+    if (!dbTransaction.finished) {
+      await dbTransaction.rollback();
+    }
     console.error("Initialize transaction error:", error);
     res.status(500).json({ error: error.message });
   }
