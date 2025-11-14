@@ -71,6 +71,13 @@ let otpExpiryTime = null;
 let otpTimerInterval = null;
 let resendTimerInterval = null;
 let resendAvailableTime = null;
+let isResuming = false;
+
+// Get query parameter from URL
+function getQueryParam(param) {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get(param);
+}
 
 // Format time as MM:SS
 function formatTime(seconds) {
@@ -179,6 +186,79 @@ async function initializePayment() {
   } catch (error) {
     alert(`Failed to initialize payment: ${error.message}`);
     window.location.href = "student-search.html";
+  }
+}
+
+// Resume existing transaction
+async function resumeTransaction(txId) {
+  const loadingCard = document.getElementById("loadingCard");
+  const otpCard = document.getElementById("otpCard");
+
+  loadingCard.classList.remove("d-none");
+  otpCard.classList.add("d-none");
+
+  try {
+    // Get pending transactions to verify this transaction exists and is valid
+    const data = await apiCall(API_ENDPOINTS.PENDING_TRANSACTIONS);
+    const transaction = data.pending_transactions.find(tx => tx.id === parseInt(txId));
+
+    if (!transaction) {
+      alert("Transaction not found or has expired. Please start a new payment.");
+      window.location.href = "student-search.html";
+      return;
+    }
+
+    // Check if transaction is expired
+    if (transaction.is_expired) {
+      alert("This transaction has expired. Please cancel it and start a new payment.");
+      window.location.href = "transactions.html";
+      return;
+    }
+
+    // Check if transaction has too many failed attempts
+    if (transaction.failed_otp_attempts >= 3) {
+      alert("This transaction has been locked due to too many failed OTP attempts. Please cancel it and start a new payment.");
+      window.location.href = "transactions.html";
+      return;
+    }
+
+    // Set transaction ID
+    transactionId = transaction.id;
+    document.getElementById("transactionId").textContent = `#${transactionId}`;
+
+    // Update payment data display
+    document.getElementById("studentInfo").textContent = `${transaction.student_name} (${transaction.student_id})`;
+    document.getElementById("semesterInfo").textContent = `${transaction.semester} - ${transaction.academic_year}`;
+    document.getElementById("amountInfo").textContent = formatCurrency(transaction.amount);
+
+    // Resend OTP to ensure user has a fresh code
+    await apiCall(API_ENDPOINTS.RESEND_OTP, {
+      method: "POST",
+      body: JSON.stringify({
+        transaction_id: transactionId,
+      }),
+    });
+
+    // Show OTP card
+    loadingCard.classList.add("d-none");
+    otpCard.classList.remove("d-none");
+
+    // Start timers
+    startOTPTimer();
+    startResendTimer();
+
+    // Focus first input
+    otpInputs[0].focus();
+
+    // Show info message if there were previous failed attempts
+    if (transaction.failed_otp_attempts > 0) {
+      const remainingAttempts = 3 - transaction.failed_otp_attempts;
+      otpError.textContent = `Warning: ${transaction.failed_otp_attempts} failed attempt(s). ${remainingAttempts} remaining.`;
+      otpError.classList.remove("d-none");
+    }
+  } catch (error) {
+    alert(`Failed to resume transaction: ${error.message}`);
+    window.location.href = "transactions.html";
   }
 }
 
@@ -327,7 +407,7 @@ function cleanupTimers() {
 
 // Cancel transaction if user leaves page without completing
 window.addEventListener("beforeunload", async (e) => {
-  if (transactionId && !paymentCompleted) {
+  if (transactionId && !paymentCompleted && !isResuming) {
     // Clean up timers
     cleanupTimers();
 
@@ -336,7 +416,7 @@ window.addEventListener("beforeunload", async (e) => {
     e.returnValue =
       "You have a pending payment. Are you sure you want to leave?";
 
-    // Try to cancel the transaction
+    // Try to cancel the transaction (only for new transactions, not resumed ones)
     try {
       await fetch(API_ENDPOINTS.TRANSACTION_CANCEL, {
         method: "POST",
@@ -350,8 +430,19 @@ window.addEventListener("beforeunload", async (e) => {
     } catch (error) {
       console.error("Failed to cancel transaction:", error);
     }
+  } else if (transactionId && !paymentCompleted && isResuming) {
+    // For resumed transactions, just show warning but don't auto-cancel
+    e.preventDefault();
+    e.returnValue =
+      "You have a pending payment. Are you sure you want to leave?";
   }
 });
 
-// Start payment initialization
-initializePayment();
+// Start payment initialization or resume existing transaction
+const resumeTransactionId = getQueryParam('transaction_id');
+if (resumeTransactionId) {
+  isResuming = true;
+  resumeTransaction(resumeTransactionId);
+} else {
+  initializePayment();
+}
