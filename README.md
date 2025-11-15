@@ -92,16 +92,19 @@ Open `frontend/index.html` in browser or use Live Server.
 
 ## API Endpoints
 
-| Method | Endpoint                          | Description         |
-| ------ | --------------------------------- | ------------------- |
-| POST   | `/api/auth/login`                 | Login               |
-| GET    | `/api/user/profile`               | Get user profile    |
-| GET    | `/api/user/transactions`          | Transaction history |
-| GET    | `/api/student/{id}`               | Student info        |
-| GET    | `/api/transaction/semesters/{id}` | Available semesters |
-| POST   | `/api/transaction/initialize`     | Start payment       |
-| POST   | `/api/transaction/send_otp`       | Resend OTP          |
-| POST   | `/api/transaction/complete`       | Complete payment    |
+| Method | Endpoint                          | Description              |
+| ------ | --------------------------------- | ------------------------ |
+| POST   | `/api/auth/login`                 | Login                    |
+| GET    | `/api/user/profile`               | Get user profile         |
+| GET    | `/api/user/transactions`          | Balance change history   |
+| GET    | `/api/student/{id}`               | Student info             |
+| GET    | `/api/transaction/semesters/{id}` | Available semesters      |
+| POST   | `/api/transaction/initialize`     | Start payment            |
+| POST   | `/api/transaction/send_otp`       | Resend OTP               |
+| POST   | `/api/transaction/complete`       | Complete payment         |
+| GET    | `/api/transaction/pending`        | Get pending transactions |
+| GET    | `/api/transaction/history`        | All transactions         |
+| POST   | `/api/transaction/cancel`         | Cancel transaction       |
 
 ## Documentation
 

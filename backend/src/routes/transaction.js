@@ -87,30 +87,40 @@ const createOTP = async (transactionId) => {
 
 // Initialize transaction
 router.post("/initialize", async (req, res) => {
+  const dbTransaction = await sequelize.transaction();
   try {
     const { student_id, tuition_id } = req.body;
     const payer_id = req.user.userId;
 
-    if (!student_id || !tuition_id)
+    if (!student_id || !tuition_id) {
+      await dbTransaction.rollback();
       return res
         .status(400)
         .json({ error: "Student ID and Tuition ID are required" });
+    }
 
     // Fetch student and semester tuition info
     const student = await Student.findOne({ where: { student_id } });
-    if (!student) return res.status(404).json({ error: "Student not found" });
+    if (!student) {
+      await dbTransaction.rollback();
+      return res.status(404).json({ error: "Student not found" });
+    }
 
     const tuition = await StudentTuition.findOne({
       where: { id: tuition_id, student_id },
     });
-    if (!tuition)
+    if (!tuition) {
+      await dbTransaction.rollback();
       return res
         .status(404)
         .json({ error: "Tuition record not found for this student" });
-    if (tuition.is_paid)
+    }
+    if (tuition.is_paid) {
+      await dbTransaction.rollback();
       return res
         .status(400)
         .json({ error: "This semester tuition is already paid" });
+    }
 
     // Check locks
     const [existingUserLock, existingSemesterLock] = await Promise.all([
@@ -120,6 +130,7 @@ router.post("/initialize", async (req, res) => {
           resource_id: payer_id.toString(),
           expires_at: { [Op.gt]: new Date() },
         },
+        transaction: dbTransaction,
       }),
       TransactionLock.findOne({
         where: {
@@ -127,71 +138,130 @@ router.post("/initialize", async (req, res) => {
           resource_id: tuition_id.toString(),
           expires_at: { [Op.gt]: new Date() },
         },
+        transaction: dbTransaction,
       }),
     ]);
-    if (existingUserLock)
+    if (existingUserLock) {
+      await dbTransaction.rollback();
       return res.status(409).json({
         error:
           "You already have a pending transaction. Please complete or wait for expiration",
       });
-    if (existingSemesterLock)
+    }
+    if (existingSemesterLock) {
+      await dbTransaction.rollback();
       return res.status(409).json({
         error:
           "This semester tuition payment is already being processed by another user.",
       });
+    }
 
-    // Create locks
+    // Create locks with unique constraint protection
     const lockExpiry = new Date(Date.now() + 5 * 60 * 1000);
-    await TransactionLock.bulkCreate([
-      {
-        resource_type: "user_account",
-        resource_id: payer_id.toString(),
-        expires_at: lockExpiry,
-      },
-      {
-        resource_type: "semester_tuition",
-        resource_id: tuition_id.toString(),
-        expires_at: lockExpiry,
-      },
-    ]);
+    try {
+      await TransactionLock.bulkCreate(
+        [
+          {
+            resource_type: "user_account",
+            resource_id: payer_id.toString(),
+            expires_at: lockExpiry,
+          },
+          {
+            resource_type: "semester_tuition",
+            resource_id: tuition_id.toString(),
+            expires_at: lockExpiry,
+          },
+        ],
+        { transaction: dbTransaction }
+      );
+    } catch (lockError) {
+      await dbTransaction.rollback();
+      // Handle race condition - another request created lock between check and create
+      if (lockError.name === "SequelizeUniqueConstraintError") {
+        // Determine which lock failed
+        const errorFields = lockError.fields || {};
+        if (errorFields.resource_type === "user_account") {
+          return res.status(409).json({
+            error:
+              "You already have a pending transaction. Please complete or wait for expiration",
+          });
+        } else {
+          return res.status(409).json({
+            error:
+              "This semester tuition payment is already being processed by another user.",
+          });
+        }
+      }
+      throw lockError; // Re-throw if not a unique constraint error
+    }
 
     // Create transaction
-    const transaction = await Transaction.create({
-      payer_id,
-      student_id,
-      tuition_id,
-      amount: tuition.tuition_amount,
-      status: "pending",
-    });
+    const transaction = await Transaction.create(
+      {
+        payer_id,
+        student_id,
+        tuition_id,
+        amount: tuition.tuition_amount,
+        status: "pending",
+      },
+      { transaction: dbTransaction }
+    );
 
-    // Send OTP
-    const otpCode = await createOTP(transaction.id);
-    const user = await User.findByPk(payer_id);
-    const emailData = {
-      student_id: student.student_id,
-      full_name: student.full_name,
-      semester: tuition.semester,
-      academic_year: tuition.academic_year,
-      tuition_amount: tuition.tuition_amount,
-    };
-    await sendOTPEmail(user.email, otpCode, emailData);
-    console.log(`Generated OTP ${otpCode} for transaction ${transaction.id}`);
+    // Commit the database transaction BEFORE sending email (email is slow I/O)
+    await dbTransaction.commit();
 
-    await transaction.update({ status: "otp_sent" });
-
-    res.json({
-      message: "Transaction created successfully. OTP sent to your email.",
-      transaction: {
-        id: transaction.id,
-        student_id: transaction.student_id,
-        tuition_id: transaction.tuition_id,
+    // Now send OTP via email (outside of database transaction to avoid blocking)
+    try {
+      const otpCode = await createOTP(transaction.id);
+      const user = await User.findByPk(payer_id);
+      const emailData = {
+        student_id: student.student_id,
+        full_name: student.full_name,
         semester: tuition.semester,
         academic_year: tuition.academic_year,
-        amount: transaction.amount,
-        status: "otp_sent",
-      },
-    });
+        tuition_amount: tuition.tuition_amount,
+      };
+      await sendOTPEmail(user.email, otpCode, emailData);
+      console.log(`Generated OTP ${otpCode} for transaction ${transaction.id}`);
+
+      // Update status to otp_sent
+      await transaction.update({ status: "otp_sent" });
+
+      res.json({
+        message: "Transaction created successfully. OTP sent to your email.",
+        transaction: {
+          id: transaction.id,
+          student_id: transaction.student_id,
+          tuition_id: transaction.tuition_id,
+          semester: tuition.semester,
+          academic_year: tuition.academic_year,
+          amount: transaction.amount,
+          status: "otp_sent",
+        },
+      });
+    } catch (emailError) {
+      // Email failed but transaction and locks are already created
+      // Log error but still return success with pending status
+      console.error("Failed to send OTP email:", emailError);
+      res.json({
+        message: "Transaction created. Please use resend OTP if you don't receive the email.",
+        transaction: {
+          id: transaction.id,
+          student_id: transaction.student_id,
+          tuition_id: transaction.tuition_id,
+          semester: tuition.semester,
+          academic_year: tuition.academic_year,
+          amount: transaction.amount,
+          status: "pending",
+        },
+        warning: "OTP email could not be sent. Please use resend OTP button.",
+      });
+    }
   } catch (error) {
+    // Only rollback if we haven't committed yet
+    if (!dbTransaction.finished) {
+      await dbTransaction.rollback();
+    }
     console.error("Initialize transaction error:", error);
     res.status(500).json({ error: error.message });
   }
